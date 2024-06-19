@@ -1,0 +1,10 @@
+[package]
+name = "pleep-audio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rubato = "0.15.0"
+symphonia = { version = "0.5.4", features = ["mp3", "opt-simd"] }
+thiserror = "1.0.61"
+tracing = "0.1.40"
