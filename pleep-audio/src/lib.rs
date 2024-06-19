@@ -96,6 +96,7 @@ pub struct Audio<T: AnySample> {
     pub sample_rate: usize,
 }
 
+#[instrument(skip(audio), err(level = "debug"), level = "trace")]
 pub fn resample_audio<T: ExtendedAnySample>(
     audio: Audio<T>,
     settings: &ResampleSettings,
