@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use tracing::{instrument, warn};
+use tracing::{instrument, trace, warn};
 
 #[instrument(level = "trace", err(level = "debug"))]
 pub fn get_files_in_directory(directory: &PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
@@ -37,6 +37,7 @@ fn get_files_recursive(
     Ok(paths)
 }
 
+#[instrument(skip(values), level = "trace")]
 pub fn make_log(values: &[f32], new_size: usize) -> Vec<f32> {
     let last_point_ln = (values.len() as f32).ln();
     let mut new = vec![0.0; new_size];
@@ -66,17 +67,23 @@ pub fn generate_log_spectrogram(
     );
     let cutoff_bin = cutoff_bin as usize;
 
-    if cutoff_bin <= spectrogram_height {
-        spectrogram.iter_mut().for_each(|col| {
-            col.truncate(cutoff_bin);
-            col.shrink_to(cutoff_bin);
-        });
-    } else {
-        let to_add = cutoff_bin - spectrogram_height;
-        let to_add = vec![0.0; to_add];
-        spectrogram.iter_mut().for_each(|col| {
-            col.extend(&to_add);
-        });
+    match cutoff_bin.cmp(&spectrogram_height) {
+        std::cmp::Ordering::Greater => {
+            let to_add = cutoff_bin - spectrogram_height;
+            trace!(to_add, "growing spectrogram");
+            let to_add = vec![0.0; to_add];
+            spectrogram.iter_mut().for_each(|col| {
+                col.extend(&to_add);
+            });
+        },
+        std::cmp::Ordering::Equal => trace!("spectrogram height matched cutoff bin"),
+        std::cmp::Ordering::Less => {
+            trace!(to_remove=spectrogram_height - cutoff_bin, "shrinking spectrogram");
+            spectrogram.iter_mut().for_each(|col| {
+                col.truncate(cutoff_bin);
+                col.shrink_to(cutoff_bin);
+            });
+        }
     }
 
     let log_spectrogram = spectrogram

@@ -57,6 +57,7 @@ impl AudioSource {
         Self { media_source }
     }
 
+    #[instrument(err(level = "debug"), level = "trace")]
     pub fn from_file_path(path: &PathBuf) -> Result<Self, std::io::Error> {
         let file = std::fs::File::open(path)?;
         let media_source_stream =
@@ -65,6 +66,18 @@ impl AudioSource {
         Ok(Self {
             media_source: media_source_stream,
         })
+    }
+
+    #[instrument(skip(buffer), level = "trace")]
+    pub fn from_memory_buffer(buffer: Vec<u8>) -> Self {
+        let media_source_stream = MediaSourceStream::new(
+            Box::new(std::io::Cursor::new(buffer)),
+            MediaSourceStreamOptions::default(),
+        );
+
+        Self {
+            media_source: media_source_stream,
+        }
     }
 }
 
