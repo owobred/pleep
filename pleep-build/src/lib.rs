@@ -49,17 +49,47 @@ pub fn make_log(values: &[f32], new_size: usize) -> Vec<f32> {
     new
 }
 
+#[instrument(skip(samples), level = "trace")]
 pub fn generate_log_spectrogram(
     samples: &[f32],
-    height: usize,
     spectrogram_settings: &pleep::spectrogram::Settings,
+    settings: &LogSpectrogramSettings,
 ) -> Vec<Vec<f32>> {
     let spectrogram_generator = pleep::spectrogram::Generator::new();
-    let spectrogram = spectrogram_generator.generate_spectrogram(&samples, &spectrogram_settings);
+    let mut spectrogram =
+        spectrogram_generator.generate_spectrogram(&samples, &spectrogram_settings);
+    let spectrogram_height = spectrogram[0].len();
+    let cutoff_bin = pleep::spectrogram::get_bin_for_frequency(
+        settings.frequency_cutoff as f64,
+        settings.input_sample_rate,
+        spectrogram_settings.fft_len,
+    );
+    let cutoff_bin = cutoff_bin as usize;
+
+    if cutoff_bin <= spectrogram_height {
+        spectrogram.iter_mut().for_each(|col| {
+            col.truncate(cutoff_bin);
+            col.shrink_to(cutoff_bin);
+        });
+    } else {
+        let to_add = cutoff_bin - spectrogram_height;
+        let to_add = vec![0.0; to_add];
+        spectrogram.iter_mut().for_each(|col| {
+            col.extend(&to_add);
+        });
+    }
+
     let log_spectrogram = spectrogram
         .into_iter()
-        .map(|col| make_log(&col, height))
+        .map(|col| make_log(&col, settings.height))
         .collect::<Vec<_>>();
 
     log_spectrogram
+}
+
+#[derive(Debug, Clone)]
+pub struct LogSpectrogramSettings {
+    pub height: usize,
+    pub frequency_cutoff: usize,
+    pub input_sample_rate: usize,
 }
