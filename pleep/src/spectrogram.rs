@@ -25,10 +25,10 @@ impl<T: Float> Generator<T> {
         }
     }
 
+    #[instrument(skip(self, samples), level = "trace")]
     pub fn generate_spectrogram(&self, samples: &[T], settings: &Settings) -> Vec<Vec<T>> {
         let fft = self.get_forward_fft(settings.fft_len);
-        let scratch_size = fft.get_outofplace_scratch_len();
-        let mut scratch = vec![Complex::new(T::zero(), T::zero()); scratch_size];
+        let mut scratch = vec![Complex::new(T::zero(), T::zero()); settings.fft_len];
         let hann = self.get_hann(settings.fft_len);
 
         let spectrogram = samples
@@ -99,8 +99,16 @@ fn generate_hanning_window<T: Float>(size: usize) -> Vec<T> {
     out
 }
 
+pub fn get_frequency_for_bin(bin: usize, sample_rate: usize, fft_len: usize) -> f64 {
+    (bin * sample_rate) as f64 / fft_len as f64
+}
+
+pub fn get_bin_for_frequency(frequency: f64, sample_rate: usize, fft_len: usize) -> f64 {
+    (frequency * fft_len as f64) / sample_rate as f64
+}
+
 #[derive(Debug, Clone)]
 pub struct Settings {
-    fft_len: usize,
-    fft_overlap: usize,
+    pub fft_len: usize,
+    pub fft_overlap: usize,
 }

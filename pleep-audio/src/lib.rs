@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use rubato::Resampler;
 use symphonia::core::{
     audio::AudioBuffer,
     codecs::DecoderOptions,
     conv::FromSample,
     formats::FormatOptions,
-    io::MediaSourceStream,
+    io::{MediaSourceStream, MediaSourceStreamOptions},
     meta::MetadataOptions,
     probe::Hint,
     sample::Sample,
@@ -46,9 +48,29 @@ impl<
 pub trait ExtendedAnySample: AnySample + rubato::Sample {}
 impl<T: AnySample + rubato::Sample> ExtendedAnySample for T {}
 
+pub struct AudioSource {
+    media_source: MediaSourceStream,
+}
+
+impl AudioSource {
+    pub fn new(media_source: MediaSourceStream) -> Self {
+        Self { media_source }
+    }
+
+    pub fn from_file_path(path: &PathBuf) -> Result<Self, std::io::Error> {
+        let file = std::fs::File::open(path)?;
+        let media_source_stream =
+            MediaSourceStream::new(Box::new(file), MediaSourceStreamOptions::default());
+
+        Ok(Self {
+            media_source: media_source_stream,
+        })
+    }
+}
+
 #[instrument(skip(media_source), err(level = "debug"), level = "trace")]
 pub fn load_audio<T: ExtendedAnySample>(
-    media_source: MediaSourceStream,
+    AudioSource { media_source }: AudioSource,
 ) -> Result<Audio<T>, Error> {
     let registry = symphonia::default::get_codecs();
     let probe = symphonia::default::get_probe();

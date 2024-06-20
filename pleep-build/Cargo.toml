@@ -1,0 +1,14 @@
+[package]
+name = "pleep-build"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.7", features = ["cargo", "derive"] }
+crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
+rayon = "1.10.0"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+pleep = { path = "../pleep/" }
+pleep-audio = { path = "../pleep-audio/" }
+image = { version = "0.25.1", default-features = false, features = ["png"] }
