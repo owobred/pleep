@@ -44,13 +44,8 @@ fn main() {
             resampled.samples.len(),
             resampled.sample_rate
         );
-        let spectrogram_generator = pleep::spectrogram::Generator::new();
-        let spectrogram =
-            spectrogram_generator.generate_spectrogram(&resampled.samples, &spectrogram_settings);
-        let log_spectrogram = spectrogram
-            .into_iter()
-            .map(|col| pleep_build::make_log(&col, 600))
-            .collect::<Vec<_>>();
+        let log_spectrogram =
+            pleep_build::generate_log_spectrogram(&resampled.samples, 600, &spectrogram_settings);
         let (width, height) = (log_spectrogram.len(), log_spectrogram[0].len());
         println!("created spectrogram {width}x{height}");
 

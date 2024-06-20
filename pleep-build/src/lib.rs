@@ -48,3 +48,18 @@ pub fn make_log(values: &[f32], new_size: usize) -> Vec<f32> {
 
     new
 }
+
+pub fn generate_log_spectrogram(
+    samples: &[f32],
+    height: usize,
+    spectrogram_settings: &pleep::spectrogram::Settings,
+) -> Vec<Vec<f32>> {
+    let spectrogram_generator = pleep::spectrogram::Generator::new();
+    let spectrogram = spectrogram_generator.generate_spectrogram(&samples, &spectrogram_settings);
+    let log_spectrogram = spectrogram
+        .into_iter()
+        .map(|col| make_log(&col, height))
+        .collect::<Vec<_>>();
+
+    log_spectrogram
+}
