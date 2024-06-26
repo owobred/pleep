@@ -151,7 +151,7 @@ pub fn resample_audio<T: ExtendedAnySample>(
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResampleSettings {
     pub target_sample_rate: usize,
     pub sub_chunks: usize,

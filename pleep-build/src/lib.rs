@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use tracing::{instrument, trace, warn};
 
+pub mod file;
+
 #[instrument(level = "trace", err(level = "debug"))]
 pub fn get_files_in_directory(directory: &PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
     get_files_recursive(directory, directory)
@@ -75,10 +77,13 @@ pub fn generate_log_spectrogram(
             spectrogram.iter_mut().for_each(|col| {
                 col.extend(&to_add);
             });
-        },
+        }
         std::cmp::Ordering::Equal => trace!("spectrogram height matched cutoff bin"),
         std::cmp::Ordering::Less => {
-            trace!(to_remove=spectrogram_height - cutoff_bin, "shrinking spectrogram");
+            trace!(
+                to_remove = spectrogram_height - cutoff_bin,
+                "shrinking spectrogram"
+            );
             spectrogram.iter_mut().for_each(|col| {
                 col.truncate(cutoff_bin);
                 col.shrink_to(cutoff_bin);

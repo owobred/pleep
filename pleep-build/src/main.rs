@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use tracing::{instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 const DEFAULT_SAMPLE_RATE: usize = 2 << 14;
 const DEFAULT_FFT_SIZE: usize = DEFAULT_SAMPLE_RATE;
@@ -22,43 +22,81 @@ fn main() {
     }
 
     let options = Options::parse();
-    let resample_settings = options.resampler.into();
-    let spectrogram_settings = options.spectrogram.into();
+    let resample_settings: pleep_audio::ResampleSettings = options.resampler.into();
+    let spectrogram_settings: pleep::spectrogram::Settings = options.spectrogram.into();
 
     let files =
         pleep_build::get_files_in_directory(&options.directory).expect("failed to list directory");
 
-    for file in files {
-        // let relative_path = file
-        //     .strip_prefix(&options.directory)
-        //     .expect("failed to strip prefix")
-        //     .to_path_buf();
+    let mut out_file = std::io::BufWriter::new(
+        std::fs::File::create(options.out_file).expect("failed to open output file for writing"),
+    );
 
-        let log_spectrogram = file_to_log_spectrogram(
-            &file,
-            &spectrogram_settings,
-            &resample_settings,
-            &options.log_settings,
-        );
-        let (width, height) = (log_spectrogram.len(), log_spectrogram[0].len());
-        let mut canvas: image::ImageBuffer<image::Luma<u8>, Vec<u8>> =
-            image::ImageBuffer::new(width as u32, height as u32);
+    let mut out_file_values = pleep_build::file::File {
+        vector_size: options.log_settings.height as u32,
+        segments: Vec::new(),
+    };
 
-        for x in 0..width {
-            for y in 0..height {
-                let pixel = canvas.get_pixel_mut(x as u32, y as u32);
-                *pixel = image::Luma([(log_spectrogram[x][height - y - 1] * 20.0) as u8]);
+    let (send, recv) = crossbeam::channel::unbounded();
+
+    let canonicalized_ignore_files = options.ignore_paths.into_iter().map(|file| file.canonicalize().unwrap()).collect::<Vec<_>>();
+
+    rayon::scope(move |s| {
+        for file in files {
+            if canonicalized_ignore_files.contains(&file.canonicalize().unwrap()) {
+                debug!(?file, "skipping file as it is ignored");
+                continue;
             }
-        }
-        canvas.save("spectrogram.png").unwrap();
 
-        break;
+            let spectrogram_settings = spectrogram_settings.clone();
+            let resample_settings = resample_settings.clone();
+            let log_settings = options.log_settings.clone();
+            let sender = send.clone();
+            s.spawn(move |_s| {
+                info!(path=?file, "processing file");
+                let log_spectrogram = file_to_log_spectrogram(
+                    &file,
+                    &spectrogram_settings,
+                    &resample_settings,
+                    &log_settings,
+                );
+
+                let segment = pleep_build::file::Segment {
+                    title: file.to_string_lossy().to_string(),
+                    vectors: log_spectrogram,
+                };
+
+                sender.send(segment).expect("failed to send to mpsc");
+            })
+        }
+    });
+    
+    info!("all subtasks finished");
+
+    while let Ok(segment) = recv.recv() {
+        out_file_values.segments.push(segment);
     }
+
+    info!("sorting segments");
+
+    out_file_values.segments.sort_by_key(|segment| segment.title.clone());
+
+    info!("saving file");
+
+    out_file_values
+        .write_to(&mut out_file)
+        .expect("failed to write file");
 }
 
-#[derive(Debug, clap::Parser)]
+#[derive(Debug, clap::Parser, Clone)]
 struct Options {
+    /// The folder to look for songs in
     directory: PathBuf,
+    /// The name of the file to output data to
+    out_file: PathBuf,
+    /// Files to be ignored in the directory
+    #[arg(long = "ignore")]
+    ignore_paths: Vec<PathBuf>,
     #[command(flatten)]
     resampler: ResampleSettings,
     #[command(flatten)]
@@ -67,7 +105,7 @@ struct Options {
     log_settings: LogSpectrogramSettings,
 }
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, clap::Args, Clone)]
 struct SpectrogramSettings {
     /// Amount of samples per fft
     #[arg(long, default_value_t = DEFAULT_FFT_SIZE)]
@@ -77,7 +115,7 @@ struct SpectrogramSettings {
     fft_overlap: usize,
 }
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, clap::Args, Clone)]
 struct LogSpectrogramSettings {
     /// Height of make the spectrogram when converting to log
     #[arg(long = "spectrogram-height", default_value_t = 200)]
@@ -96,7 +134,7 @@ impl Into<pleep::spectrogram::Settings> for SpectrogramSettings {
     }
 }
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, clap::Args, Clone)]
 struct ResampleSettings {
     /// Resample audio to this before processing
     #[arg(short = 'r', long, default_value_t = DEFAULT_SAMPLE_RATE)]

@@ -399,6 +399,7 @@ dependencies = [
  "pleep",
  "pleep-audio",
  "rayon",
+ "thiserror",
  "tracing",
  "tracing-subscriber",
 ]
