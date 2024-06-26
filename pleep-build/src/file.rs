@@ -1,12 +1,12 @@
 pub struct File {
-    // build_params:
-    pub vector_size: u32,
+    pub build_settings: BuildSettings,
     pub segments: Vec<Segment>,
 }
 
 impl File {
     pub fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
-        buffer.write(&self.vector_size.to_le_bytes())?;
+        self.build_settings.write_to(buffer)?;
+
         buffer.write(&(self.segments.len() as u32).to_le_bytes())?;
 
         for segment in &self.segments {
@@ -17,9 +17,7 @@ impl File {
     }
 
     pub fn read_from(reader: &mut impl std::io::Read) -> Result<Self, Error> {
-        let mut vector_size_buf = [0; 4];
-        reader.read_exact(&mut vector_size_buf)?;
-        let vector_size = u32::from_le_bytes(vector_size_buf);
+        let build_settings = BuildSettings::read_from(reader)?;
 
         let mut n_segments_buf = [0; 4];
         reader.read_exact(&mut n_segments_buf)?;
@@ -28,14 +26,75 @@ impl File {
         let mut segments = Vec::with_capacity(n_segments as usize);
 
         for _ in 0..n_segments {
-            let segment = Segment::read_from(reader, vector_size)?;
+            let segment = Segment::read_from(reader, build_settings.spectrogram_height)?;
             segments.push(segment);
         }
 
         Ok(Self {
-            vector_size,
+            build_settings,
             segments,
         })
+    }
+}
+
+pub struct BuildSettings {
+    pub fft_size: u32,
+    pub fft_overlap: u32,
+    pub spectrogram_height: u32,
+    pub spectrogram_max_frequency: u32,
+    pub resample_rate: u32,
+}
+
+impl BuildSettings {
+    pub fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
+        buffer.write(&self.fft_size.to_le_bytes())?;
+        buffer.write(&self.fft_overlap.to_le_bytes())?;
+        buffer.write(&self.spectrogram_height.to_le_bytes())?;
+        buffer.write(&self.spectrogram_max_frequency.to_le_bytes())?;
+        buffer.write(&self.resample_rate.to_le_bytes())?;
+    
+        Ok(())
+    }
+    pub fn read_from(reader: &mut impl std::io::Read) -> Result<Self, Error> {
+        let mut fft_size_buffer = [0; 4];
+        reader.read_exact(&mut fft_size_buffer)?;
+        let fft_size = u32::from_le_bytes(fft_size_buffer);
+
+        let mut fft_overlap_buffer = [0; 4];
+        reader.read_exact(&mut fft_overlap_buffer)?;
+        let fft_overlap = u32::from_le_bytes(fft_overlap_buffer);
+
+        let mut spectrogram_height_buffer = [0; 4];
+        reader.read_exact(&mut spectrogram_height_buffer)?;
+        let spectrogram_height = u32::from_le_bytes(spectrogram_height_buffer);
+
+        let mut spectrogram_max_frequency_buffer = [0; 4];
+        reader.read_exact(&mut spectrogram_max_frequency_buffer)?;
+        let spectrogram_max_frequency = u32::from_le_bytes(spectrogram_max_frequency_buffer);
+
+        let mut resample_rate_buffer = [0; 4];
+        reader.read_exact(&mut resample_rate_buffer)?;
+        let resample_rate = u32::from_le_bytes(resample_rate_buffer);
+
+        Ok(Self {
+            fft_size,
+            fft_overlap,
+            spectrogram_height,
+            spectrogram_max_frequency,
+            resample_rate,
+        })
+    }
+}
+
+impl From<crate::cli::Options> for BuildSettings {
+    fn from(value: crate::cli::Options) -> Self {
+        Self {
+            fft_size: value.spectrogram.fft_size as u32,
+            fft_overlap: value.spectrogram.fft_overlap as u32,
+            spectrogram_height: value.log_settings.height as u32,
+            spectrogram_max_frequency: value.log_settings.max_frequency as u32,
+            resample_rate: value.resampler.resample_rate as u32,
+        }
     }
 }
 

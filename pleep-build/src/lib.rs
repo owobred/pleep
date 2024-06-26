@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use tracing::{instrument, trace, warn};
 
+pub mod cli;
 pub mod file;
 
 #[instrument(level = "trace", err(level = "debug"))]

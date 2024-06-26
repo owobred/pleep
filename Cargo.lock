@@ -405,6 +405,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pleep-search"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "pleep",
+ "pleep-audio",
+ "pleep-build",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "png"
 version = "0.17.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
