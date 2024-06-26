@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use clap::Parser;
 use tracing::info;
 
-const DEFAULT_MAX_DISTANCE: f32 = 100.0;
+const DEFAULT_MAX_DISTANCE: f32 = 0.95;
 
 fn main() {
     {
@@ -45,7 +45,7 @@ fn main() {
         .into(),
     );
 
-    info!(columns=spectrogram.len(), "created spectrogram");
+    info!(columns = spectrogram.len(), "created spectrogram");
 
     let mut best_matches = Vec::new();
 
@@ -56,7 +56,7 @@ fn main() {
             let closest = segment
                 .vectors
                 .iter()
-                .map(|vector| distance_sq(&sample, vector))
+                .map(|vector| 1.0 - distance_cosine(&sample, vector))
                 .min_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Greater))
                 .unwrap_or(f32::INFINITY);
 
@@ -96,16 +96,17 @@ fn main() {
     });
     best.reverse();
 
-    let mut output = CommandOutput { matches: Vec::with_capacity(options.n_results) };
+    let mut output = CommandOutput {
+        matches: Vec::with_capacity(options.n_results),
+    };
 
     for (index, (song_index, score)) in best.iter().take(options.n_results).enumerate() {
         let title = &file.segments[*song_index].title;
-        output.matches.push(Match { title: title.to_owned(), score: *score });
-        info!(
-            "{: >4}: {} [score={score}]",
-            index + 1,
-            title,
-        );
+        output.matches.push(Match {
+            title: title.to_owned(),
+            score: *score,
+        });
+        info!("{: >4}: {} [score={score}]", index + 1, title,);
     }
 
     if options.json {
@@ -117,6 +118,13 @@ fn main() {
 
 fn distance_sq(l1: &[f32], l2: &[f32]) -> f32 {
     l1.into_iter().zip(l2).map(|(l, r)| (l - r).powi(2)).sum()
+}
+
+fn distance_cosine(l1: &[f32], l2: &[f32]) -> f32 {
+    let numer: f32 = l1.into_iter().zip(l2.into_iter()).map(|(l, r)| l * r).sum();
+    let mag = distance_sq(l1, l2);
+
+    numer / mag.sqrt()
 }
 
 #[derive(Debug, clap::Parser, Clone)]
