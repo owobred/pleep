@@ -37,6 +37,7 @@ impl File {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BuildSettings {
     pub fft_size: u32,
     pub fft_overlap: u32,

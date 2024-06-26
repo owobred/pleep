@@ -24,6 +24,8 @@ fn main() {
 
     let file = pleep_build::file::File::read_from(&mut reader).unwrap();
 
+    info!(build_settings=?file.build_settings, "read search file");
+
     let spectrogram = pleep_build::cli::file_to_log_spectrogram(
         &options.audio_file,
         &pleep_build::cli::SpectrogramSettings {
@@ -42,6 +44,8 @@ fn main() {
         }
         .into(),
     );
+
+    info!(columns=spectrogram.len(), "created spectrogram");
 
     let mut best_matches = Vec::new();
 
@@ -69,6 +73,8 @@ fn main() {
                 .unwrap(),
         )
     }
+
+    info!("completed matching samples");
 
     let mut out_counter = HashMap::new();
 
