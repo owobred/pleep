@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
+use tracing::info;
 
 const DEFAULT_MAX_DISTANCE: f32 = 100.0;
 
@@ -19,8 +20,7 @@ fn main() {
 
     let options = Options::parse();
 
-    let mut reader =
-        std::io::BufReader::new(std::fs::File::open(&options.lookup_file).unwrap());
+    let mut reader = std::io::BufReader::new(std::fs::File::open(&options.lookup_file).unwrap());
 
     let file = pleep_build::file::File::read_from(&mut reader).unwrap();
 
@@ -90,12 +90,22 @@ fn main() {
     });
     best.reverse();
 
-    for (index, (song_index, score) )in best.iter().take(options.n_results).enumerate() {
-        println!(
+    let mut output = CommandOutput { matches: Vec::with_capacity(options.n_results) };
+
+    for (index, (song_index, score)) in best.iter().take(options.n_results).enumerate() {
+        let title = &file.segments[*song_index].title;
+        output.matches.push(Match { title: title.to_owned(), score: *score });
+        info!(
             "{: >4}: {} [score={score}]",
             index + 1,
-            &file.segments[*song_index].title
+            title,
         );
+    }
+
+    if options.json {
+        let json = serde_json::to_string(&output).unwrap();
+
+        print!("{json}");
     }
 }
 
@@ -118,4 +128,18 @@ struct Options {
     /// Number of sub chunks to use when resampling
     #[arg(long, default_value_t = 2048)]
     resample_sub_chunks: usize,
+    /// Output a json object detailing the outputs to stdout
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    json: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct CommandOutput {
+    matches: Vec<Match>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct Match {
+    title: String,
+    score: f32,
 }
