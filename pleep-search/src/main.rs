@@ -33,7 +33,7 @@ fn main() {
         .into(),
         &pleep_build::cli::ResampleSettings {
             resample_rate: file.build_settings.resample_rate as usize,
-            sub_chunks: 2048,
+            sub_chunks: options.resample_sub_chunks,
         }
         .into(),
         &pleep_build::cli::LogSpectrogramSettings {
@@ -115,4 +115,7 @@ struct Options {
     /// Number of results to display
     #[arg(long, default_value_t = 10)]
     n_results: usize,
+    /// Number of sub chunks to use when resampling
+    #[arg(long, default_value_t = 2048)]
+    resample_sub_chunks: usize,
 }
