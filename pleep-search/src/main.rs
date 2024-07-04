@@ -100,13 +100,19 @@ fn main() {
         matches: Vec::with_capacity(options.n_results),
     };
 
-    for (index, (song_index, score)) in best.iter().take(options.n_results).enumerate() {
+    let best = best.iter().take(options.n_results).collect::<Vec<_>>();
+    let softmaxed = softmax(&best.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+
+    for (index, ((song_index, score), softmax_value)) in
+        best.into_iter().zip(softmaxed.into_iter()).enumerate()
+    {
         let title = &file.segments[*song_index].title;
         output.matches.push(Match {
             title: title.to_owned(),
             score: *score,
+            softmax_prob: softmax_value,
         });
-        info!("{: >4}: {} [score={score}]", index + 1, title,);
+        info!("{: >4}: {} [score={score}] [softmax_prob={softmax_value}]", index + 1, title,);
     }
 
     if options.json {
@@ -156,4 +162,11 @@ struct CommandOutput {
 struct Match {
     title: String,
     score: f32,
+    softmax_prob: f32,
+}
+
+fn softmax(values: &[f32]) -> Vec<f32> {
+    let sum: f32 = values.into_iter().sum();
+
+    values.into_iter().map(|v| *v / sum).collect()
 }
