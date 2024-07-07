@@ -108,8 +108,7 @@ pub fn load_audio<T: ExtendedAnySample>(
         }
 
         let audio_buffer = decoder.decode(&packet)?;
-        let mut float_converted: AudioBuffer<T> =
-            AudioBuffer::new(audio_buffer.frames() as u64, audio_buffer.spec().to_owned());
+        let mut float_converted = audio_buffer.make_equivalent();
         audio_buffer.convert(&mut float_converted);
         drop(audio_buffer);
         let planes = float_converted.planes();
