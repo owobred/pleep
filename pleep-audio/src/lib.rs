@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use rubato::Resampler;
 use symphonia::core::{
-    audio::AudioBuffer,
     codecs::DecoderOptions,
     conv::FromSample,
     formats::FormatOptions,
