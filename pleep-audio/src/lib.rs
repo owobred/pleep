@@ -1,17 +1,17 @@
-use std::path::PathBuf;
+use std::{collections::VecDeque, path::PathBuf};
 
 use rubato::Resampler;
 use symphonia::core::{
-    codecs::DecoderOptions,
+    codecs::{Decoder, DecoderOptions},
     conv::FromSample,
-    formats::FormatOptions,
+    formats::{FormatOptions, FormatReader},
     io::{MediaSourceStream, MediaSourceStreamOptions},
     meta::MetadataOptions,
     probe::Hint,
     sample::Sample,
 };
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{error, instrument};
 
 pub trait AnySample:
     Sample
@@ -127,6 +127,97 @@ pub fn load_audio<T: ExtendedAnySample>(
 pub struct Audio<T: AnySample> {
     pub samples: Vec<T>,
     pub sample_rate: usize,
+}
+
+pub struct ConvertingAudioIterator<T: ExtendedAnySample> {
+    format: Box<dyn FormatReader>,
+    decoder: Box<dyn Decoder>,
+    discovered_sample_rate: u32,
+    track_id: u32,
+    buffer: VecDeque<T>,
+    _resample_to: std::marker::PhantomData<T>,
+}
+
+impl<T: ExtendedAnySample> ConvertingAudioIterator<T> {
+    pub fn new(
+        AudioSource { media_source }: AudioSource,
+    ) -> Result<Self, symphonia::core::errors::Error> {
+        let registry = symphonia::default::get_codecs();
+        let probe = symphonia::default::get_probe();
+        let format = probe.format(
+            &Hint::new(),
+            media_source,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )?;
+
+        let default_track = format.format.default_track().expect("no default track");
+        let default_track_id = default_track.id;
+        let default_track_params = default_track.codec_params.to_owned();
+
+        let decoder = registry.make(&default_track_params, &DecoderOptions::default())?;
+
+        Ok(Self {
+            discovered_sample_rate: default_track_params.sample_rate.unwrap(),
+            format: format.format,
+            decoder,
+            track_id: default_track_id,
+            buffer: VecDeque::new(),
+            _resample_to: std::marker::PhantomData,
+        })
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        self.discovered_sample_rate
+    }
+
+    pub fn remaining_to_audio(self) -> Audio<T> {
+        let sample_rate = self.sample_rate() as usize;
+        let samples = self.collect::<Vec<_>>();
+
+        Audio {
+            samples,
+            sample_rate,
+        }
+    }
+}
+
+impl<T: ExtendedAnySample> Iterator for ConvertingAudioIterator<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(sample) = self.buffer.pop_front() {
+            return Some(sample);
+        }
+
+        while let Ok(packet) = self.format.next_packet() {
+            if packet.track_id() != self.track_id {
+                continue;
+            }
+
+            let audio_buffer = match self.decoder.decode(&packet) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    error!(?error, "failed to decode packet");
+                    return None;
+                }
+            };
+
+            let mut float_converted = audio_buffer.make_equivalent();
+            audio_buffer.convert(&mut float_converted);
+            drop(audio_buffer);
+
+            let planes = float_converted.planes();
+            let planes_slice = planes.planes();
+            let main_channel = planes_slice[0];
+
+            self.buffer.extend(main_channel);
+
+            return self.buffer.pop_front();
+        }
+
+        return None;
+    }
 }
 
 #[instrument(skip(audio), err(level = "debug"), level = "trace")]

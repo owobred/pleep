@@ -79,10 +79,11 @@ pub fn file_to_log_spectrogram(
     resample_settings: &pleep_audio::ResampleSettings,
     log_spectrogram_settings: &LogSpectrogramSettings,
 ) -> Vec<Vec<f32>> {
-    let audio: pleep_audio::Audio<f32> = pleep_audio::load_audio(
-        pleep_audio::AudioSource::from_file_path(&path).expect("failed to load audio source"),
+    let audio: pleep_audio::Audio<f32> = pleep_audio::ConvertingAudioIterator::new(
+        pleep_audio::AudioSource::from_file_path(&path).expect("failed to get audio source"),
     )
-    .expect("failed to get audio samples");
+    .expect("failed to load file")
+    .remaining_to_audio();
     trace!(
         sample_rate = audio.sample_rate,
         n_samples = audio.samples.len(),
