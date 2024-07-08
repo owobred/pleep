@@ -35,6 +35,7 @@ fn main() {
         .into(),
         &pleep_build::cli::ResampleSettings {
             resample_rate: file.build_settings.resample_rate as usize,
+            chunk_size: options.resample_chunk_size,
             sub_chunks: options.resample_sub_chunks,
         }
         .into(),
@@ -146,8 +147,11 @@ struct Options {
     #[arg(long, default_value_t = 10)]
     n_results: usize,
     /// Number of sub chunks to use when resampling
-    #[arg(long, default_value_t = 2048)]
+    #[arg(long, default_value_t = 1)]
     resample_sub_chunks: usize,
+    /// Size of each chunk when doing resampling
+    #[arg(long, default_value_t = 2 << 14)]
+    resample_chunk_size: usize,
     /// Output a json object detailing the outputs to stdout
     #[arg(long, action = clap::ArgAction::SetTrue)]
     json: bool,

@@ -177,30 +177,80 @@ impl<T: ExtendedAnySample> Iterator for ConvertingAudioIterator<T> {
     }
 }
 
-#[instrument(skip(audio), err(level = "debug"), level = "trace")]
-pub fn resample_audio<T: ExtendedAnySample>(
-    audio: Audio<T>,
-    settings: &ResampleSettings,
-) -> Result<Audio<T>, Error> {
-    let mut resampler = rubato::FftFixedIn::new(
-        audio.sample_rate,
-        settings.target_sample_rate,
-        audio.samples.len(),
-        settings.sub_chunks,
-        1,
-    )?;
-    let resampled = resampler.process(&[&audio.samples], None)?;
+pub struct ResamplingChunksIterator<T: ExtendedAnySample, I: Iterator<Item = T>> {
+    original_sample_rate: usize,
+    inner_iterator: I,
+    resampler: rubato::FftFixedIn<T>,
+    settings: ResampleSettings,
+}
 
-    Ok(Audio {
-        samples: resampled.into_iter().next().unwrap(),
-        sample_rate: settings.target_sample_rate,
-    })
+impl<T: ExtendedAnySample, I: Iterator<Item = T>> ResamplingChunksIterator<T, I> {
+    pub fn new(
+        wraps: I,
+        original_sample_rate: usize,
+        settings: ResampleSettings,
+    ) -> Result<Self, rubato::ResamplerConstructionError> {
+        let resampler = rubato::FftFixedIn::new(
+            original_sample_rate,
+            settings.target_sample_rate,
+            settings.chunk_size,
+            settings.sub_chunks,
+            1,
+        )?;
+
+        Ok(Self {
+            original_sample_rate,
+            inner_iterator: wraps,
+            resampler,
+            settings,
+        })
+    }
+}
+
+impl<T: ExtendedAnySample> ResamplingChunksIterator<T, ConvertingAudioIterator<T>> {
+    pub fn new_from_audio_iterator(
+        iterator: ConvertingAudioIterator<T>,
+        settings: ResampleSettings,
+    ) -> Result<Self, rubato::ResamplerConstructionError> {
+        let sample_rate = iterator.sample_rate() as usize;
+
+        Self::new(iterator, sample_rate, settings)
+    }
+}
+
+impl<T: ExtendedAnySample, I: Iterator<Item = T>> Iterator for ResamplingChunksIterator<T, I> {
+    type Item = Vec<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut samples = Vec::with_capacity(self.settings.chunk_size);
+
+        while let Some(sample) = self.inner_iterator.next() {
+            samples.push(sample);
+
+            if samples.len() >= self.settings.chunk_size {
+                break;
+            }
+        }
+
+        if samples.len() == 0 {
+            return None;
+        }
+
+        samples.resize(self.settings.chunk_size, T::zero());
+
+        let resampled = self.resampler
+            .process(&[samples], None)
+            .expect("failed to resample");
+
+        Some(resampled.into_iter().next().unwrap())
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ResampleSettings {
     pub target_sample_rate: usize,
     pub sub_chunks: usize,
+    pub chunk_size: usize,
 }
 
 #[derive(Debug, Error)]

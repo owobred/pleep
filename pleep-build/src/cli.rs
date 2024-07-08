@@ -58,9 +58,12 @@ pub struct ResampleSettings {
     /// Resample audio to this before processing
     #[arg(short = 'r', long, default_value_t = DEFAULT_SAMPLE_RATE)]
     pub resample_rate: usize,
-    /// Sub chunk size for resampler
-    #[arg(long = "resample-sub-chunks", default_value_t = 2 << 10)]
+    /// Number of sub chunks used in resampler
+    #[arg(long = "resample-sub-chunks", default_value_t = 1)]
     pub sub_chunks: usize,
+    /// Sub chunk size for resampler
+    #[arg(long = "resample-chunk-size", default_value_t = 2 << 14)]
+    pub chunk_size: usize,
 }
 
 impl Into<pleep_audio::ResampleSettings> for ResampleSettings {
@@ -68,6 +71,7 @@ impl Into<pleep_audio::ResampleSettings> for ResampleSettings {
         pleep_audio::ResampleSettings {
             target_sample_rate: self.resample_rate,
             sub_chunks: self.sub_chunks,
+            chunk_size: self.chunk_size,
         }
     }
 }
@@ -79,25 +83,21 @@ pub fn file_to_log_spectrogram(
     resample_settings: &pleep_audio::ResampleSettings,
     log_spectrogram_settings: &LogSpectrogramSettings,
 ) -> Vec<Vec<f32>> {
-    let audio: pleep_audio::Audio<f32> = pleep_audio::ConvertingAudioIterator::new(
+    let audio = pleep_audio::ConvertingAudioIterator::new(
         pleep_audio::AudioSource::from_file_path(&path).expect("failed to get audio source"),
     )
-    .expect("failed to load file")
-    .remaining_to_audio();
-    trace!(
-        sample_rate = audio.sample_rate,
-        n_samples = audio.samples.len(),
-        "loaded audio"
-    );
-    let resampled =
-        pleep_audio::resample_audio(audio, &resample_settings).expect("failed to resample audio");
-    trace!(
-        sample_rate = resampled.sample_rate,
-        n_samples = resampled.samples.len(),
-        "completed resample"
-    );
+    .expect("failed to load file");
+
+    let resampled = pleep_audio::ResamplingChunksIterator::new_from_audio_iterator(
+        audio,
+        resample_settings.to_owned(),
+    )
+    .expect("failed to create resampler")
+    .flatten()
+    .collect::<Vec<f32>>();
+
     let log_spectrogram = crate::generate_log_spectrogram(
-        resampled.samples,
+        resampled,
         &spectrogram_settings,
         &crate::LogSpectrogramSettings {
             height: log_spectrogram_settings.height,
