@@ -80,49 +80,6 @@ impl AudioSource {
     }
 }
 
-#[instrument(skip(media_source), err(level = "debug"), level = "trace")]
-pub fn load_audio<T: ExtendedAnySample>(
-    AudioSource { media_source }: AudioSource,
-) -> Result<Audio<T>, Error> {
-    let registry = symphonia::default::get_codecs();
-    let probe = symphonia::default::get_probe();
-    let mut format = probe.format(
-        &Hint::new(),
-        media_source,
-        &FormatOptions::default(),
-        &MetadataOptions::default(),
-    )?;
-
-    let default_track = format.format.default_track().expect("no default track");
-    let default_track_id = default_track.id;
-    let default_track_params = default_track.codec_params.to_owned();
-
-    let mut decoder = registry.make(&default_track_params, &DecoderOptions::default())?;
-
-    let mut samples = Vec::new();
-
-    while let Ok(packet) = format.format.next_packet() {
-        if packet.track_id() != default_track_id {
-            continue;
-        }
-
-        let audio_buffer = decoder.decode(&packet)?;
-        let mut float_converted = audio_buffer.make_equivalent();
-        audio_buffer.convert(&mut float_converted);
-        drop(audio_buffer);
-        let planes = float_converted.planes();
-        let planes_slice = planes.planes();
-        let main_channel = planes_slice[0];
-
-        samples.extend(main_channel);
-    }
-
-    Ok(Audio {
-        sample_rate: default_track_params.sample_rate.unwrap() as usize,
-        samples,
-    })
-}
-
 #[derive(Debug)]
 pub struct Audio<T: AnySample> {
     pub samples: Vec<T>,
