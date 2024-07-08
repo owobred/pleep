@@ -92,7 +92,6 @@ pub struct ConvertingAudioIterator<T: ExtendedAnySample> {
     discovered_sample_rate: u32,
     track_id: u32,
     buffer: VecDeque<T>,
-    _resample_to: std::marker::PhantomData<T>,
 }
 
 impl<T: ExtendedAnySample> ConvertingAudioIterator<T> {
@@ -120,7 +119,6 @@ impl<T: ExtendedAnySample> ConvertingAudioIterator<T> {
             decoder,
             track_id: default_track_id,
             buffer: VecDeque::new(),
-            _resample_to: std::marker::PhantomData,
         })
     }
 
