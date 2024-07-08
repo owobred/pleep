@@ -1,9 +1,10 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{Arc, Mutex, RwLock},
 };
 
 use num_complex::Complex;
+use num_traits::Zero;
 use rustfft::{Fft, FftPlanner};
 use tracing::instrument;
 
@@ -23,39 +24,6 @@ impl<T: Float> Generator<T> {
             fft_planner: Arc::new(Mutex::new(rustfft::FftPlanner::new())),
             hanns: Default::default(),
         }
-    }
-
-    #[instrument(skip(self, samples), level = "trace")]
-    pub fn generate_spectrogram(&self, samples: &[T], settings: &Settings) -> Vec<Vec<T>> {
-        let fft = self.get_forward_fft(settings.fft_len);
-        let mut scratch = vec![Complex::new(T::zero(), T::zero()); settings.fft_len];
-        let hann = self.get_hann(settings.fft_len);
-
-        let spectrogram = samples
-            .into_iter()
-            .map(|sample| Complex::new(*sample, T::zero()))
-            .collect::<Vec<_>>()
-            .windows(settings.fft_len)
-            .step_by(settings.fft_len - settings.fft_overlap)
-            .map(|sample_group| {
-                let mut group = sample_group.to_vec();
-                group
-                    .iter_mut()
-                    .zip(hann.iter())
-                    .for_each(|(sample, &frac)| sample.re = sample.re * frac);
-                fft.process_with_scratch(&mut group, &mut scratch);
-                group
-            })
-            .map(|group| {
-                group
-                    .into_iter()
-                    .take(settings.fft_len / 2)
-                    .map(|v| v.norm())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-
-        spectrogram
     }
 
     fn get_forward_fft(&self, len: usize) -> Arc<dyn Fft<T>> {
@@ -111,4 +79,86 @@ pub fn get_bin_for_frequency(frequency: f64, sample_rate: usize, fft_len: usize)
 pub struct Settings {
     pub fft_len: usize,
     pub fft_overlap: usize,
+}
+
+pub struct SpectrogramIterator<S: Float, T: Iterator<Item = S>> {
+    buffer: VecDeque<S>,
+    fft_scratch: Vec<Complex<S>>,
+    inner: T,
+    settings: Settings,
+    hann: Vec<S>,
+    fft: Arc<dyn Fft<S>>,
+}
+
+impl<S: Float, T: Iterator<Item = S>> SpectrogramIterator<S, T> {
+    pub fn new(wraps: T, settings: Settings, generator: Generator<S>) -> Self {
+        let fft = generator.get_forward_fft(settings.fft_len);
+        let hann = generator.get_hann(settings.fft_len).to_vec();
+
+        Self {
+            buffer: VecDeque::with_capacity(settings.fft_len),
+            fft_scratch: vec![Complex::zero(); settings.fft_len],
+            inner: wraps,
+            settings,
+            hann,
+            fft,
+        }
+    }
+
+    fn generate_spectrogram_col(
+        &mut self,
+        samples: impl IntoIterator<Item = Complex<S>>,
+    ) -> Vec<S> {
+        let mut hanned = samples
+            .into_iter()
+            .zip(self.hann.iter())
+            .map(|(sample, hann)| sample * *hann)
+            .collect::<Vec<Complex<S>>>();
+        self.fft
+            .process_with_scratch(&mut hanned, &mut self.fft_scratch);
+        hanned
+            .into_iter()
+            .take(self.settings.fft_len / 2)
+            .map(|c| c.norm())
+            .collect::<Vec<_>>()
+    }
+}
+
+impl<S: Float, T: Iterator<Item = S>> Iterator for SpectrogramIterator<S, T> {
+    type Item = Vec<S>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let next_sample = self.inner.next();
+            
+            match next_sample {
+                Some(sample) => self.buffer.push_back(sample),
+                None => match self.buffer.is_empty() {
+                    true => return None,
+                    false => self.buffer.resize(self.settings.fft_len, S::zero()),
+                },
+            };
+
+
+            if self.buffer.len() >= self.settings.fft_len {
+                break;
+            }
+        }
+
+        assert!(self.buffer.len() <= self.settings.fft_len);
+
+        let samples = self
+            .buffer
+            .iter()
+            .take(self.settings.fft_len)
+            .cloned()
+            .map(|s| Complex::new(s, S::zero()))
+            .collect::<Vec<_>>();
+
+        self.buffer.drain(..self.settings.fft_len).for_each(drop);
+
+        let spectrogram = self.generate_spectrogram_col(samples);
+
+        Some(spectrogram)
+    }
 }

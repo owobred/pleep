@@ -55,13 +55,18 @@ pub fn make_log(values: &[f32], new_size: usize) -> Vec<f32> {
 
 #[instrument(skip(samples), level = "trace")]
 pub fn generate_log_spectrogram(
-    samples: &[f32],
+    samples: impl IntoIterator<Item = f32>,
     spectrogram_settings: &pleep::spectrogram::Settings,
     settings: &LogSpectrogramSettings,
 ) -> Vec<Vec<f32>> {
     let spectrogram_generator = pleep::spectrogram::Generator::new();
-    let mut spectrogram =
-        spectrogram_generator.generate_spectrogram(&samples, &spectrogram_settings);
+    let mut spectrogram = pleep::spectrogram::SpectrogramIterator::new(
+        samples.into_iter(),
+        spectrogram_settings.to_owned(),
+        spectrogram_generator,
+    )
+    .collect::<Vec<_>>();
+    // spectrogram_generator.generate_spectrogram(&samples, &spectrogram_settings);
     let spectrogram_height = spectrogram[0].len();
     let cutoff_bin = pleep::spectrogram::get_bin_for_frequency(
         settings.frequency_cutoff as f64,

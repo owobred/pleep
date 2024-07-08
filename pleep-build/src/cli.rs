@@ -96,7 +96,7 @@ pub fn file_to_log_spectrogram(
         "completed resample"
     );
     let log_spectrogram = crate::generate_log_spectrogram(
-        &resampled.samples,
+        resampled.samples,
         &spectrogram_settings,
         &crate::LogSpectrogramSettings {
             height: log_spectrogram_settings.height,
