@@ -66,7 +66,8 @@ pub fn generate_log_spectrogram(
         spectrogram_generator,
     )
     .collect::<Vec<_>>();
-    let spectrogram_height = spectrogram_settings.fft_len;
+    // spectrogram_generator.generate_spectrogram(&samples, &spectrogram_settings);
+    let spectrogram_height = spectrogram[0].len();
     let cutoff_bin = pleep::spectrogram::get_bin_for_frequency(
         settings.frequency_cutoff as f64,
         settings.input_sample_rate,
