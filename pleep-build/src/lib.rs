@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use tracing::{instrument, trace, warn};
+use pleep::spectrogram::SpectrogramIterator;
+use tracing::{instrument, warn};
 
 pub mod cli;
 pub mod file;
@@ -41,33 +42,38 @@ fn get_files_recursive(
 }
 
 #[instrument(skip(values), level = "trace")]
-pub fn make_log(values: &[f32], new_size: usize) -> Vec<f32> {
-    let last_point_ln = (values.len() as f32).ln();
-    let mut new = vec![0.0; new_size];
+pub fn make_log<S: pleep::spectrogram::Float>(values: &[S], log_indexes: &[S]) -> Vec<S> {
+    let last_point_ln = S::from(values.len()).unwrap().ln();
+    let mut new = vec![S::zero(); log_indexes.len()];
 
-    for index in 0..new_size {
-        let point = (index as f32).ln() / last_point_ln * values.len() as f32;
-        new[index] = values[point as usize];
+    for (index, log_index) in log_indexes.into_iter().enumerate() {
+        let point = *log_index / last_point_ln * S::from(values.len()).unwrap();
+        new[index] = values[point.to_usize().unwrap_or(0)];
     }
 
     new
 }
 
+pub fn gen_log_indexes<S: pleep::spectrogram::Float>(start_at: usize, end_at: usize) -> Vec<S> {
+    (start_at..=end_at)
+        .into_iter()
+        .map(|index| S::from(index).unwrap().ln())
+        .collect()
+}
+
 #[instrument(skip(samples), level = "trace")]
-pub fn generate_log_spectrogram(
-    samples: impl IntoIterator<Item = f32>,
+pub fn generate_log_spectrogram<S: pleep::spectrogram::Float, I: Iterator<Item = S>>(
+    samples: impl IntoIterator<Item = S, IntoIter = I>,
     spectrogram_settings: &pleep::spectrogram::Settings,
     settings: &LogSpectrogramSettings,
-) -> Vec<Vec<f32>> {
+) -> LogSpectrogramIterator<S, I> {
     let spectrogram_generator = pleep::spectrogram::Generator::new();
-    let mut spectrogram = pleep::spectrogram::SpectrogramIterator::new(
+    let spectrogram = pleep::spectrogram::SpectrogramIterator::new(
         samples.into_iter(),
         spectrogram_settings.to_owned(),
         spectrogram_generator,
-    )
-    .collect::<Vec<_>>();
+    );
 
-    let spectrogram_height = spectrogram_settings.fft_len / 2;
     let cutoff_bin = pleep::spectrogram::get_bin_for_frequency(
         settings.frequency_cutoff as f64,
         settings.input_sample_rate,
@@ -75,34 +81,47 @@ pub fn generate_log_spectrogram(
     );
     let cutoff_bin = cutoff_bin as usize;
 
-    match cutoff_bin.cmp(&spectrogram_height) {
-        std::cmp::Ordering::Greater => {
-            let to_add = cutoff_bin - spectrogram_height;
-            trace!(to_add, "growing spectrogram");
-            let to_add = vec![0.0; to_add];
-            spectrogram.iter_mut().for_each(|col| {
-                col.extend(&to_add);
-            });
-        }
-        std::cmp::Ordering::Equal => trace!("spectrogram height matched cutoff bin"),
-        std::cmp::Ordering::Less => {
-            trace!(
-                to_remove = spectrogram_height - cutoff_bin,
-                "shrinking spectrogram"
-            );
-            spectrogram.iter_mut().for_each(|col| {
-                col.truncate(cutoff_bin);
-                col.shrink_to(cutoff_bin);
-            });
+    LogSpectrogramIterator::new(spectrogram, settings.to_owned(), cutoff_bin)
+}
+
+pub struct LogSpectrogramIterator<S: pleep::spectrogram::Float, I: Iterator<Item = S>> {
+    inner: SpectrogramIterator<S, I>,
+    cutoff_bin: usize,
+    log_indexes: Vec<S>,
+}
+
+impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> LogSpectrogramIterator<S, I> {
+    pub fn new(
+        spectrogram: SpectrogramIterator<S, I>,
+        settings: LogSpectrogramSettings,
+        cutoff_bin: usize,
+    ) -> Self {
+        let log_indexes = gen_log_indexes(0, settings.height - 1);
+
+        Self {
+            inner: spectrogram,
+            log_indexes,
+            cutoff_bin,
         }
     }
 
-    let log_spectrogram = spectrogram
-        .into_iter()
-        .map(|col| make_log(&col, settings.height))
-        .collect::<Vec<_>>();
+    pub fn height(&self) -> usize {
+        self.cutoff_bin
+    }
+}
 
-    log_spectrogram
+impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> Iterator
+    for LogSpectrogramIterator<S, I>
+{
+    type Item = Vec<S>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|mut col| {
+            col.resize(self.cutoff_bin, S::zero());
+
+            make_log(&col, &self.log_indexes)
+        })
+    }
 }
 
 #[derive(Debug, Clone)]

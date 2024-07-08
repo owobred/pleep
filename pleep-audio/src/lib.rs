@@ -216,6 +216,16 @@ impl<T: ExtendedAnySample> ResamplingChunksIterator<T, ConvertingAudioIterator<T
 
         Self::new(iterator, sample_rate, settings)
     }
+
+    pub fn remaining_to_audio(self) -> Audio<T> {
+        let sample_rate = self.original_sample_rate;
+        let samples = self.flatten().collect::<Vec<_>>();
+
+        Audio {
+            samples,
+            sample_rate,
+        }
+    }
 }
 
 impl<T: ExtendedAnySample, I: Iterator<Item = T>> Iterator for ResamplingChunksIterator<T, I> {
@@ -238,7 +248,8 @@ impl<T: ExtendedAnySample, I: Iterator<Item = T>> Iterator for ResamplingChunksI
 
         samples.resize(self.settings.chunk_size, T::zero());
 
-        let resampled = self.resampler
+        let resampled = self
+            .resampler
             .process(&[samples], None)
             .expect("failed to resample");
 

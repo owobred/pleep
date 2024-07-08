@@ -105,7 +105,9 @@ pub fn file_to_log_spectrogram(
             input_sample_rate: resample_settings.target_sample_rate,
         },
     );
-    let (width, height) = (log_spectrogram.len(), log_spectrogram[0].len());
+    let height = log_spectrogram.height();
+    let log_spectrogram = log_spectrogram.collect::<Vec<_>>();
+    let width = log_spectrogram.len();
     trace!(width, height, "created log spectrogram");
 
     log_spectrogram
