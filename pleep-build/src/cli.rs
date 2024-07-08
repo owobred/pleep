@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use tracing::{instrument, trace};
+use tracing::instrument;
+
+use crate::LogSpectrogramIterator;
 
 const DEFAULT_SAMPLE_RATE: usize = 2 << 14;
 const DEFAULT_FFT_SIZE: usize = DEFAULT_SAMPLE_RATE;
@@ -82,7 +84,7 @@ pub fn file_to_log_spectrogram(
     spectrogram_settings: &pleep::spectrogram::Settings,
     resample_settings: &pleep_audio::ResampleSettings,
     log_spectrogram_settings: &LogSpectrogramSettings,
-) -> Vec<Vec<f32>> {
+) -> LogSpectrogramIterator<f32, std::vec::IntoIter<f32>> {
     let audio = pleep_audio::ConvertingAudioIterator::new(
         pleep_audio::AudioSource::from_file_path(&path).expect("failed to get audio source"),
     )
@@ -105,10 +107,10 @@ pub fn file_to_log_spectrogram(
             input_sample_rate: resample_settings.target_sample_rate,
         },
     );
-    let height = log_spectrogram.height();
-    let log_spectrogram = log_spectrogram.collect::<Vec<_>>();
-    let width = log_spectrogram.len();
-    trace!(width, height, "created log spectrogram");
+    // let height = log_spectrogram.height();
+    // let log_spectrogram = log_spectrogram.collect::<Vec<_>>();
+    // let width = log_spectrogram.len();
+    // trace!(width, height, "created log spectrogram");
 
     log_spectrogram
 }

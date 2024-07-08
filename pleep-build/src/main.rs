@@ -61,7 +61,7 @@ fn main() {
 
                 let segment = pleep_build::file::Segment {
                     title: file.to_string_lossy().to_string(),
-                    vectors: log_spectrogram,
+                    vectors: log_spectrogram.collect(),
                 };
 
                 sender.send(segment).expect("failed to send to mpsc");

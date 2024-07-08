@@ -53,7 +53,7 @@ impl BuildSettings {
         buffer.write(&self.spectrogram_height.to_le_bytes())?;
         buffer.write(&self.spectrogram_max_frequency.to_le_bytes())?;
         buffer.write(&self.resample_rate.to_le_bytes())?;
-    
+
         Ok(())
     }
     pub fn read_from(reader: &mut impl std::io::Read) -> Result<Self, Error> {

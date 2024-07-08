@@ -46,8 +46,6 @@ fn main() {
         .into(),
     );
 
-    info!(columns = spectrogram.len(), "created spectrogram");
-
     let mut best_matches = Vec::new();
 
     for sample in spectrogram {
@@ -113,7 +111,11 @@ fn main() {
             score: *score,
             scaled_prob,
         });
-        info!("{: >4}: {} [score={score}] [scaled_prob={scaled_prob}]", index + 1, title,);
+        info!(
+            "{: >4}: {} [score={score}] [scaled_prob={scaled_prob}]",
+            index + 1,
+            title,
+        );
     }
 
     if options.json {

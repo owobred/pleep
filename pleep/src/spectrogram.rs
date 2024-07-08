@@ -130,7 +130,7 @@ impl<S: Float, T: Iterator<Item = S>> Iterator for SpectrogramIterator<S, T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let next_sample = self.inner.next();
-            
+
             match next_sample {
                 Some(sample) => self.buffer.push_back(sample),
                 None => match self.buffer.is_empty() {
@@ -138,7 +138,6 @@ impl<S: Float, T: Iterator<Item = S>> Iterator for SpectrogramIterator<S, T> {
                     false => self.buffer.resize(self.settings.fft_len, S::zero()),
                 },
             };
-
 
             if self.buffer.len() >= self.settings.fft_len {
                 break;
