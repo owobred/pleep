@@ -401,7 +401,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "crossbeam",
- "image",
  "pleep",
  "pleep-audio",
  "rayon",
@@ -415,6 +414,7 @@ name = "pleep-search"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "image",
  "pleep",
  "pleep-audio",
  "pleep-build",

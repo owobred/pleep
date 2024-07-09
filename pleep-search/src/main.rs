@@ -35,8 +35,8 @@ fn main() {
         .into(),
         &pleep_build::cli::ResampleSettings {
             resample_rate: file.build_settings.resample_rate as usize,
-            chunk_size: options.resample_chunk_size,
-            sub_chunks: options.resample_sub_chunks,
+            chunk_size: file.build_settings.resample_chunk_size as usize,
+            sub_chunks: file.build_settings.resample_sub_chunks as usize,
         }
         .into(),
         &pleep_build::cli::LogSpectrogramSettings {
@@ -45,6 +45,12 @@ fn main() {
         }
         .into(),
     );
+
+    // in an ideal world saving a debug image wouldn't require this
+    let spectrogram = spectrogram.collect::<Vec<_>>();
+    if options.debug_images {
+        save_spectrogram("input.png", spectrogram.clone());
+    }
 
     let mut best_matches = Vec::new();
 
@@ -100,10 +106,15 @@ fn main() {
     };
 
     let best = best.iter().take(options.n_results).collect::<Vec<_>>();
-    let softmaxed = scale_results(&best.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+    let scaled = scale_results(&best.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+
+    if options.debug_images {
+        let best_match = &file.segments[best.first().unwrap().0];
+        save_spectrogram("best.png", best_match.vectors.clone());
+    }
 
     for (index, ((song_index, score), scaled_prob)) in
-        best.into_iter().zip(softmaxed.into_iter()).enumerate()
+        best.into_iter().zip(scaled.into_iter()).enumerate()
     {
         let title = &file.segments[*song_index].title;
         output.matches.push(Match {
@@ -123,6 +134,17 @@ fn main() {
 
         print!("{json}");
     }
+}
+
+fn save_spectrogram(name: &str, vectors: Vec<Vec<f32>>) {
+    let mut canvas: image::ImageBuffer<image::Luma<u8>, Vec<_>> =
+        image::ImageBuffer::new(vectors.len() as u32, vectors[0].len() as u32);
+    for (x, column) in vectors.iter().enumerate() {
+        for (y, value) in column.iter().enumerate() {
+            canvas.put_pixel(x as u32, y as u32, image::Luma([(*value * 10.0) as u8]));
+        }
+    }
+    canvas.save(name).expect("failed to save spectrogram debug image");
 }
 
 fn distance_sq(l1: &[f32], l2: &[f32]) -> f32 {
@@ -148,15 +170,12 @@ struct Options {
     /// Number of results to display
     #[arg(long, default_value_t = 10)]
     n_results: usize,
-    /// Number of sub chunks to use when resampling
-    #[arg(long, default_value_t = 1)]
-    resample_sub_chunks: usize,
-    /// Size of each chunk when doing resampling
-    #[arg(long, default_value_t = 2 << 14)]
-    resample_chunk_size: usize,
     /// Output a json object detailing the outputs to stdout
     #[arg(long, action = clap::ArgAction::SetTrue)]
     json: bool,
+    /// Generate some debug spectrograms for the fun of it
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    debug_images: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

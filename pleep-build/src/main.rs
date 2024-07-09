@@ -19,8 +19,11 @@ fn main() {
     let resample_settings: pleep_audio::ResampleSettings = options.clone().resampler.into();
     let spectrogram_settings: pleep::spectrogram::Settings = options.clone().spectrogram.into();
 
-    let files =
-        pleep_build::get_files_in_directory(&options.directory).expect("failed to list directory");
+    let files = options
+        .search_directories
+        .iter()
+        .flat_map(|dir| pleep_build::get_files_in_directory(dir).expect("failed to list directory"))
+        .collect::<Vec<_>>();
 
     let mut out_file = std::io::BufWriter::new(
         std::fs::File::create(&options.out_file).expect("failed to open output file for writing"),

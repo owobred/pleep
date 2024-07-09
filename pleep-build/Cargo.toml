@@ -11,5 +11,4 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 pleep = { path = "../pleep/" }
 pleep-audio = { path = "../pleep-audio/" }
-image = { version = "0.25.1", default-features = false, features = ["png"] }
 thiserror = "1.0.61"

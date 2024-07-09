@@ -11,8 +11,9 @@ const DEFAULT_MAX_FREQUENCY: usize = DEFAULT_SAMPLE_RATE / 2;
 
 #[derive(Debug, clap::Parser, Clone)]
 pub struct Options {
-    /// The folder to look for songs in
-    pub directory: PathBuf,
+    /// The folders to look for songs in
+    #[arg(long = "search")]
+    pub search_directories: Vec<PathBuf>,
     /// The name of the file to output data to
     pub out_file: PathBuf,
     /// Files to be ignored in the directory
@@ -107,10 +108,6 @@ pub fn file_to_log_spectrogram(
             input_sample_rate: resample_settings.target_sample_rate,
         },
     );
-    // let height = log_spectrogram.height();
-    // let log_spectrogram = log_spectrogram.collect::<Vec<_>>();
-    // let width = log_spectrogram.len();
-    // trace!(width, height, "created log spectrogram");
 
     log_spectrogram
 }

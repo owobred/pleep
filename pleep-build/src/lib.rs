@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use pleep::spectrogram::SpectrogramIterator;
-use tracing::{instrument, warn};
+use tracing::{debug, instrument, warn};
 
 pub mod cli;
 pub mod file;
@@ -29,6 +29,11 @@ fn get_files_recursive(
 
         let file_path = file.path();
         let file_type = file.file_type()?;
+
+        if file_path.ends_with(".gitignore") {
+            debug!(?file_path, "skipped gitignore file");
+            continue;
+        }
 
         if file_type.is_dir() {
             let mut sub_files = get_files_recursive(&directory.join(file.file_name()), base)?;
