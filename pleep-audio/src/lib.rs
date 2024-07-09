@@ -176,7 +176,6 @@ impl<T: ExtendedAnySample> Iterator for ConvertingAudioIterator<T> {
 }
 
 pub struct ResamplingChunksIterator<T: ExtendedAnySample, I: Iterator<Item = T>> {
-    original_sample_rate: usize,
     inner_iterator: I,
     resampler: rubato::FftFixedIn<T>,
     settings: ResampleSettings,
@@ -197,7 +196,6 @@ impl<T: ExtendedAnySample, I: Iterator<Item = T>> ResamplingChunksIterator<T, I>
         )?;
 
         Ok(Self {
-            original_sample_rate,
             inner_iterator: wraps,
             resampler,
             settings,
