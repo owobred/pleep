@@ -105,7 +105,7 @@ pub struct Segment {
 }
 
 impl Segment {
-    fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
+    pub fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
         buffer.write(&(self.title.len() as u32).to_le_bytes())?;
         buffer.write(self.title.as_bytes())?;
         buffer.write(&(self.vectors.len() as u32).to_le_bytes())?;
@@ -119,7 +119,7 @@ impl Segment {
         Ok(())
     }
 
-    fn read_from(reader: &mut impl std::io::Read, vector_length: u32) -> Result<Self, Error> {
+    pub fn read_from(reader: &mut impl std::io::Read, vector_length: u32) -> Result<Self, Error> {
         let mut title_length_buf = [0; 4];
         reader.read_exact(&mut title_length_buf)?;
         let title_length = u32::from_le_bytes(title_length_buf);
