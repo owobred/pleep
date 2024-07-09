@@ -216,7 +216,7 @@ impl<T: ExtendedAnySample> ResamplingChunksIterator<T, ConvertingAudioIterator<T
     }
 
     pub fn remaining_to_audio(self) -> Audio<T> {
-        let sample_rate = self.original_sample_rate;
+        let sample_rate = self.settings.target_sample_rate;
         let samples = self.flatten().collect::<Vec<_>>();
 
         Audio {
