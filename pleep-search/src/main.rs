@@ -50,7 +50,7 @@ fn main() {
     // in an ideal world saving a debug image wouldn't require this
     let spectrogram = spectrogram.collect::<Vec<_>>();
     if options.debug_images {
-        save_spectrogram("input.png", spectrogram.clone());
+        save_spectrogram("input.png", &spectrogram);
     }
 
     let mut out_counter = HashMap::new();
@@ -59,7 +59,7 @@ fn main() {
         let mut sample_distances = Vec::new();
 
         for (segment_index, segment) in file.segments.iter().enumerate() {
-            for vector in segment.vectors.iter() {
+            for vector in &segment.vectors {
                 let Some(distance) = distance_cosine(sample, vector) else {
                     continue;
                 };
@@ -108,15 +108,16 @@ fn main() {
 
     if options.debug_images {
         let best_match = &file.segments[best.first().unwrap().0];
-        let best_image = save_spectrogram("best.png", best_match.vectors.clone());
+        let best_image = save_spectrogram("best.png", &best_match.vectors);
         let mut difference: image::ImageBuffer<image::Luma<u8>, Vec<_>> = image::ImageBuffer::new(
             best_image.width().min(spectrogram.len() as u32),
             best_image.height().min(spectrogram[0].len() as u32),
         );
         difference.rows_mut().enumerate().for_each(|(y, best_row)| {
             best_row.into_iter().enumerate().for_each(|(x, best)| {
-                *best = image::Luma([((best_match.vectors[x][y] - spectrogram[x][y]) * 10.0) as u8])
-            })
+                *best =
+                    image::Luma([((best_match.vectors[x][y] - spectrogram[x][y]) * 10.0) as u8]);
+            });
         });
         difference
             .save("difference.png")
@@ -148,7 +149,7 @@ fn main() {
 
 fn save_spectrogram(
     name: &str,
-    vectors: Vec<Vec<f32>>,
+    vectors: &[Vec<f32>],
 ) -> image::ImageBuffer<image::Luma<u8>, Vec<u8>> {
     let mut canvas = image::ImageBuffer::new(vectors.len() as u32, vectors[0].len() as u32);
     for (x, column) in vectors.iter().enumerate() {

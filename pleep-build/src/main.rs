@@ -53,6 +53,7 @@ fn main() {
             let resample_settings = resample_settings.clone();
             let log_settings = options.log_settings.clone();
             let sender = send.clone();
+
             s.spawn(move |_s| {
                 info!(path=?file, "processing file");
                 let log_spectrogram = file_to_log_spectrogram(
@@ -68,7 +69,7 @@ fn main() {
                 };
 
                 sender.send(segment).expect("failed to send to mpsc");
-            })
+            });
         }
     });
 

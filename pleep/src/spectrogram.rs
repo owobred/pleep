@@ -22,7 +22,7 @@ impl<T: Float> Generator<T> {
     pub fn new() -> Self {
         Self {
             fft_planner: Arc::new(Mutex::new(rustfft::FftPlanner::new())),
-            hanns: Default::default(),
+            hanns: Arc::default(),
         }
     }
 
@@ -35,12 +35,11 @@ impl<T: Float> Generator<T> {
     fn get_hann(&self, size: usize) -> Arc<Vec<T>> {
         let read = self.hanns.read().unwrap();
 
-        match read.contains_key(&size) {
-            true => read.get(&size).unwrap().to_owned(),
-            false => {
-                drop(read);
-                self.generate_hann(size)
-            }
+        if read.contains_key(&size) {
+            read.get(&size).unwrap().to_owned()
+        } else {
+            drop(read);
+            self.generate_hann(size)
         }
     }
 
@@ -97,7 +96,7 @@ pub struct SpectrogramIterator<S: Float, T: Iterator<Item = S>> {
 }
 
 impl<S: Float, T: Iterator<Item = S>> SpectrogramIterator<S, T> {
-    pub fn new(wraps: T, settings: Settings, generator: Generator<S>) -> Self {
+    pub fn new(wraps: T, settings: Settings, generator: &Generator<S>) -> Self {
         let fft = generator.get_forward_fft(settings.fft_len);
         let hann = generator.get_hann(settings.fft_len).to_vec();
 
@@ -125,7 +124,7 @@ impl<S: Float, T: Iterator<Item = S>> SpectrogramIterator<S, T> {
         hanned
             .into_iter()
             .take(self.settings.fft_len / 2)
-            .map(|c| c.norm())
+            .map(num_complex::Complex::norm)
             .collect::<Vec<_>>()
     }
 }
@@ -139,10 +138,13 @@ impl<S: Float, T: Iterator<Item = S>> Iterator for SpectrogramIterator<S, T> {
 
             match next_sample {
                 Some(sample) => self.buffer.push_back(sample),
-                None => match self.buffer.is_empty() {
-                    true => return None,
-                    false => self.buffer.resize(self.settings.fft_len, S::zero()),
-                },
+                None => {
+                    if self.buffer.is_empty() {
+                        return None;
+                    } else {
+                        self.buffer.resize(self.settings.fft_len, S::zero())
+                    }
+                }
             };
 
             if self.buffer.len() >= self.settings.fft_len {
@@ -156,7 +158,7 @@ impl<S: Float, T: Iterator<Item = S>> Iterator for SpectrogramIterator<S, T> {
             .buffer
             .iter()
             .take(self.settings.fft_len)
-            .cloned()
+            .copied()
             .map(|s| Complex::new(s, S::zero()))
             .collect::<Vec<_>>();
 

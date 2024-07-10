@@ -75,7 +75,7 @@ pub fn generate_log_spectrogram<S: pleep::spectrogram::Float, I: Iterator<Item =
     let spectrogram = pleep::spectrogram::SpectrogramIterator::new(
         samples.into_iter(),
         spectrogram_settings.to_owned(),
-        spectrogram_generator,
+        &spectrogram_generator,
     );
 
     let cutoff_bin = pleep::spectrogram::get_bin_for_frequency(
@@ -85,7 +85,7 @@ pub fn generate_log_spectrogram<S: pleep::spectrogram::Float, I: Iterator<Item =
     );
     let cutoff_bin = cutoff_bin as usize;
 
-    LogSpectrogramIterator::new(spectrogram, settings.to_owned(), cutoff_bin)
+    LogSpectrogramIterator::new(spectrogram, settings, cutoff_bin)
 }
 
 pub struct LogSpectrogramIterator<S: pleep::spectrogram::Float, I: Iterator<Item = S>> {
@@ -97,7 +97,7 @@ pub struct LogSpectrogramIterator<S: pleep::spectrogram::Float, I: Iterator<Item
 impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> LogSpectrogramIterator<S, I> {
     pub fn new(
         spectrogram: SpectrogramIterator<S, I>,
-        settings: LogSpectrogramSettings,
+        settings: &LogSpectrogramSettings,
         cutoff_bin: usize,
     ) -> Self {
         let log_indexes = gen_log_indexes(0, settings.height - 1);

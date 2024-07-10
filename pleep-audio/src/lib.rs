@@ -109,7 +109,7 @@ impl<T: ExtendedAnySample> ConvertingAudioIterator<T> {
 
         let default_track = format.format.default_track().expect("no default track");
         let default_track_id = default_track.id;
-        let default_track_params = default_track.codec_params.to_owned();
+        let default_track_params = default_track.codec_params.clone();
 
         let decoder = registry.make(&default_track_params, &DecoderOptions::default())?;
 
