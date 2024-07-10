@@ -230,7 +230,10 @@ impl<T: ExtendedAnySample, I: Iterator<Item = T>> Iterator for ResamplingChunksI
     fn next(&mut self) -> Option<Self::Item> {
         let mut samples = Vec::with_capacity(self.settings.chunk_size);
 
-        #[allow(clippy::while_let_on_iterator, reason = "type contraints of `I` do not allow calling `I::by_ref(&self)`")]
+        #[allow(
+            clippy::while_let_on_iterator,
+            reason = "type contraints of `I` do not allow calling `I::by_ref(&self)`"
+        )]
         while let Some(sample) = self.inner_iterator.next() {
             samples.push(sample);
 
