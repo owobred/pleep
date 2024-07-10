@@ -43,7 +43,7 @@ pub struct LogSpectrogramSettings {
     #[arg(long = "spectrogram-height", default_value_t = 200)]
     pub height: usize,
     /// Maximum frequency of the log spectrogram
-    #[arg(long = "spectrogram-max-frequency", default_value_t = DEFAULT_MAX_FREQUENCY)]
+    #[arg(long = "spectrogram-max-frequency", default_value_t = DEFAULT_MAX_FREQUENCY, value_parser = parse_frequency)]
     pub max_frequency: usize,
 }
 
@@ -59,7 +59,7 @@ impl From<SpectrogramSettings> for pleep::spectrogram::Settings {
 #[derive(Debug, clap::Args, Clone)]
 pub struct ResampleSettings {
     /// Resample audio to this before processing
-    #[arg(short = 'r', long, default_value_t = DEFAULT_SAMPLE_RATE)]
+    #[arg(short = 'r', long, default_value_t = DEFAULT_SAMPLE_RATE, value_parser = parse_frequency)]
     pub resample_rate: usize,
     /// Number of sub chunks used in resampler
     #[arg(long = "resample-sub-chunks", default_value_t = 1)]
@@ -108,4 +108,39 @@ pub fn file_to_log_spectrogram(
             input_sample_rate: resample_settings.target_sample_rate,
         },
     )
+}
+
+pub fn parse_frequency(input: &str) -> Result<usize, ParseFrequencyError> {
+    let lower = input.trim().to_lowercase();
+    let lower = input.strip_suffix("hz").unwrap_or(&lower);
+
+    let multiplier = if lower.ends_with("k") {
+        1000
+    } else if lower.chars().map(|c| c.is_numeric()).all(|v| v) {
+        1
+    } else {
+        return Err(ParseFrequencyError::InvalidText(input.to_string()));
+    };
+
+    let numbers = lower.chars().filter(|c| c.is_numeric()).collect::<String>();
+
+    let freq: usize = numbers
+        .parse()
+        .map_err(|error| ParseFrequencyError::ParseInt {
+            text: numbers,
+            original: error,
+        })?;
+
+    Ok(freq * multiplier)
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseFrequencyError {
+    #[error("invalid text: {0}")]
+    InvalidText(String),
+    #[error("failed to parse string to integer: {text:?} {original:?}")]
+    ParseInt {
+        text: String,
+        original: std::num::ParseIntError,
+    },
 }
