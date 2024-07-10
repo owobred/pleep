@@ -3,7 +3,9 @@ use std::{collections::HashMap, path::PathBuf};
 use clap::Parser;
 use tracing::info;
 
-const DEFAULT_MAX_DISTANCE: f32 = 0.95;
+const DEFAULT_MAX_DISTANCE: f32 = 0.75;
+const DEFAULT_CLOSEST_VECTORS: usize = 5;
+const DEFAULT_NUM_RESULTS: usize = 10;
 
 fn main() {
     {
@@ -52,54 +54,54 @@ fn main() {
         save_spectrogram("input.png", spectrogram.clone());
     }
 
-    let mut best_matches = Vec::new();
+    let mut out_counter = HashMap::new();
 
     for sample in &spectrogram {
-        let mut segment_matches = Vec::with_capacity(file.segments.len());
+        let mut sample_distances = Vec::new();
 
         for (segment_index, segment) in file.segments.iter().enumerate() {
-            let closest = segment
-                .vectors
-                .iter()
-                .map(|vector| 1.0 - distance_cosine(&sample, vector))
-                .min_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Greater))
-                .unwrap_or(f32::INFINITY);
+            for vector in segment.vectors.iter() {
+                let Some(distance) = distance_cosine(&sample, vector) else {
+                    continue;
+                };
 
-            segment_matches.push((segment_index, closest));
+                if distance < options.max_distance {
+                    continue;
+                }
+
+                sample_distances.push((segment_index, distance));
+            }
         }
 
-        best_matches.push(
-            segment_matches
-                .into_iter()
-                .min_by(|(_, left), (_, right)| {
-                    left.partial_cmp(right)
-                        .unwrap_or(std::cmp::Ordering::Greater)
-                })
-                .unwrap(),
-        )
+        sample_distances.sort_by(|(_, l), (_, r)| {
+            l.partial_cmp(r)
+                .unwrap_or(std::cmp::Ordering::Greater)
+                .reverse()
+        });
+
+        for (score_index, (segment_index, distance)) in sample_distances
+            .into_iter()
+            .take(options.n_closest_vectors)
+            .enumerate()
+        {
+            if !out_counter.contains_key(&segment_index) {
+                out_counter.insert(segment_index, 0.0);
+            }
+
+            let entry = out_counter.get_mut(&segment_index).unwrap();
+            *entry += distance.powi(3) / (score_index + 1) as f32;
+        }
     }
 
     info!("completed matching samples");
-
-    let mut out_counter = HashMap::new();
-
-    for (best_index, value) in best_matches {
-        if !out_counter.contains_key(&best_index) {
-            out_counter.insert(best_index, 0.0);
-        }
-
-        let hm_value = out_counter.get_mut(&best_index).unwrap();
-
-        *hm_value += (options.max_distance - value).max(0.0);
-    }
 
     let mut best = out_counter.into_iter().collect::<Vec<_>>();
 
     best.sort_by(|(_, left), (_, right)| {
         left.partial_cmp(right)
             .unwrap_or(std::cmp::Ordering::Greater)
+            .reverse()
     });
-    best.reverse();
 
     let mut output = CommandOutput {
         matches: Vec::with_capacity(options.n_results),
@@ -112,8 +114,8 @@ fn main() {
         let best_match = &file.segments[best.first().unwrap().0];
         let best_image = save_spectrogram("best.png", best_match.vectors.clone());
         let mut difference: image::ImageBuffer<image::Luma<u8>, Vec<_>> = image::ImageBuffer::new(
-            best_image.width().min(spectrogram.len() as u32 - 1),
-            best_image.height().min(spectrogram[0].len() as u32 - 1),
+            best_image.width().min(spectrogram.len() as u32),
+            best_image.height().min(spectrogram[0].len() as u32),
         );
         difference.rows_mut().enumerate().for_each(|(y, best_row)| {
             best_row.into_iter().enumerate().for_each(|(x, best)| {
@@ -164,15 +166,17 @@ fn save_spectrogram(
     canvas
 }
 
-fn distance_sq(l1: &[f32], l2: &[f32]) -> f32 {
-    l1.into_iter().zip(l2).map(|(l, r)| (l - r).powi(2)).sum()
+fn magnitude_sq(l1: &[f32]) -> f32 {
+    l1.into_iter().map(|v| v.powi(2)).sum()
 }
 
-fn distance_cosine(l1: &[f32], l2: &[f32]) -> f32 {
+fn distance_cosine(l1: &[f32], l2: &[f32]) -> Option<f32> {
     let numer: f32 = l1.into_iter().zip(l2.into_iter()).map(|(l, r)| l * r).sum();
-    let mag = distance_sq(l1, l2);
+    let denom = magnitude_sq(l1) * magnitude_sq(l2);
 
-    numer / mag.sqrt()
+    let result = numer / denom.sqrt();
+
+    result.is_finite().then(|| result)
 }
 
 #[derive(Debug, clap::Parser, Clone)]
@@ -184,8 +188,11 @@ struct Options {
     /// Maximum distance to consider points at
     #[arg(long, default_value_t = DEFAULT_MAX_DISTANCE)]
     max_distance: f32,
+    /// Number of vectors to consider when comparing vectors
+    #[arg(long, default_value_t = DEFAULT_CLOSEST_VECTORS)]
+    n_closest_vectors: usize,
     /// Number of results to display
-    #[arg(long, default_value_t = 10)]
+    #[arg(long, default_value_t = DEFAULT_NUM_RESULTS)]
     n_results: usize,
     /// Output a json object detailing the outputs to stdout
     #[arg(long, action = clap::ArgAction::SetTrue)]
