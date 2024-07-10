@@ -65,7 +65,7 @@ pub struct ResampleSettings {
     #[arg(long = "resample-sub-chunks", default_value_t = 1)]
     pub sub_chunks: usize,
     /// Sub chunk size for resampler
-    #[arg(long = "resample-chunk-size", default_value_t = 2 << 14)]
+    #[arg(long = "resample-chunk-size", default_value_t = 2 << 16)]
     pub chunk_size: usize,
 }
 
