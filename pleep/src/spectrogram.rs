@@ -54,14 +54,20 @@ impl<T: Float> Generator<T> {
     }
 }
 
+impl<T: Float> Default for Generator<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn generate_hanning_window<T: Float>(size: usize) -> Vec<T> {
     let half = T::from(0.5).unwrap();
     let tau = T::from(std::f64::consts::TAU).unwrap();
 
     let mut out = vec![T::zero(); size];
 
-    for i in 0..size {
-        out[i] = half * (T::one() - (tau * (T::from(i).unwrap() / T::from(size).unwrap())).cos());
+    for (i, item) in out.iter_mut().enumerate() {
+        *item = half * (T::one() - (tau * (T::from(i).unwrap() / T::from(size).unwrap())).cos());
     }
 
     out

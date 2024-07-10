@@ -47,11 +47,11 @@ pub struct LogSpectrogramSettings {
     pub max_frequency: usize,
 }
 
-impl Into<pleep::spectrogram::Settings> for SpectrogramSettings {
-    fn into(self) -> pleep::spectrogram::Settings {
+impl From<SpectrogramSettings> for pleep::spectrogram::Settings {
+    fn from(val: SpectrogramSettings) -> Self {
         pleep::spectrogram::Settings {
-            fft_len: self.fft_size,
-            fft_overlap: self.fft_overlap,
+            fft_len: val.fft_size,
+            fft_overlap: val.fft_overlap,
         }
     }
 }
@@ -69,12 +69,12 @@ pub struct ResampleSettings {
     pub chunk_size: usize,
 }
 
-impl Into<pleep_audio::ResampleSettings> for ResampleSettings {
-    fn into(self) -> pleep_audio::ResampleSettings {
+impl From<ResampleSettings> for pleep_audio::ResampleSettings {
+    fn from(val: ResampleSettings) -> Self {
         pleep_audio::ResampleSettings {
-            target_sample_rate: self.resample_rate,
-            sub_chunks: self.sub_chunks,
-            chunk_size: self.chunk_size,
+            target_sample_rate: val.resample_rate,
+            sub_chunks: val.sub_chunks,
+            chunk_size: val.chunk_size,
         }
     }
 }
@@ -87,7 +87,7 @@ pub fn file_to_log_spectrogram(
     log_spectrogram_settings: &LogSpectrogramSettings,
 ) -> LogSpectrogramIterator<f32, std::vec::IntoIter<f32>> {
     let audio = pleep_audio::ConvertingAudioIterator::new(
-        pleep_audio::AudioSource::from_file_path(&path).expect("failed to get audio source"),
+        pleep_audio::AudioSource::from_file_path(path).expect("failed to get audio source"),
     )
     .expect("failed to load file");
 
@@ -99,15 +99,13 @@ pub fn file_to_log_spectrogram(
     .flatten()
     .collect::<Vec<f32>>();
 
-    let log_spectrogram = crate::generate_log_spectrogram(
+    crate::generate_log_spectrogram(
         resampled,
-        &spectrogram_settings,
+        spectrogram_settings,
         &crate::LogSpectrogramSettings {
             height: log_spectrogram_settings.height,
             frequency_cutoff: log_spectrogram_settings.max_frequency,
             input_sample_rate: resample_settings.target_sample_rate,
         },
-    );
-
-    log_spectrogram
+    )
 }

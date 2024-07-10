@@ -7,7 +7,7 @@ impl File {
     pub fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
         self.build_settings.write_to(buffer)?;
 
-        buffer.write(&(self.segments.len() as u32).to_le_bytes())?;
+        buffer.write_all(&(self.segments.len() as u32).to_le_bytes())?;
 
         for segment in &self.segments {
             segment.write_to(buffer)?;
@@ -50,13 +50,13 @@ pub struct BuildSettings {
 
 impl BuildSettings {
     pub fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
-        buffer.write(&self.fft_size.to_le_bytes())?;
-        buffer.write(&self.fft_overlap.to_le_bytes())?;
-        buffer.write(&self.spectrogram_height.to_le_bytes())?;
-        buffer.write(&self.spectrogram_max_frequency.to_le_bytes())?;
-        buffer.write(&self.resample_rate.to_le_bytes())?;
-        buffer.write(&self.resample_chunk_size.to_le_bytes())?;
-        buffer.write(&self.resample_sub_chunks.to_le_bytes())?;
+        buffer.write_all(&self.fft_size.to_le_bytes())?;
+        buffer.write_all(&self.fft_overlap.to_le_bytes())?;
+        buffer.write_all(&self.spectrogram_height.to_le_bytes())?;
+        buffer.write_all(&self.spectrogram_max_frequency.to_le_bytes())?;
+        buffer.write_all(&self.resample_rate.to_le_bytes())?;
+        buffer.write_all(&self.resample_chunk_size.to_le_bytes())?;
+        buffer.write_all(&self.resample_sub_chunks.to_le_bytes())?;
 
         Ok(())
     }
@@ -122,13 +122,13 @@ pub struct Segment {
 
 impl Segment {
     pub fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
-        buffer.write(&(self.title.len() as u32).to_le_bytes())?;
-        buffer.write(self.title.as_bytes())?;
-        buffer.write(&(self.vectors.len() as u32).to_le_bytes())?;
+        buffer.write_all(&(self.title.len() as u32).to_le_bytes())?;
+        buffer.write_all(self.title.as_bytes())?;
+        buffer.write_all(&(self.vectors.len() as u32).to_le_bytes())?;
 
         for vector in &self.vectors {
             for value in vector {
-                buffer.write(&value.to_le_bytes())?;
+                buffer.write_all(&value.to_le_bytes())?;
             }
         }
 

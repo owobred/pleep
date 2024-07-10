@@ -51,7 +51,7 @@ pub fn make_log<S: pleep::spectrogram::Float>(values: &[S], log_indexes: &[S]) -
     let last_point_ln = S::from(values.len()).unwrap().ln();
     let mut new = vec![S::zero(); log_indexes.len()];
 
-    for (index, log_index) in log_indexes.into_iter().enumerate() {
+    for (index, log_index) in log_indexes.iter().enumerate() {
         let point = *log_index / last_point_ln * S::from(values.len()).unwrap();
         new[index] = values[point.to_usize().unwrap_or(0)];
     }
@@ -61,7 +61,6 @@ pub fn make_log<S: pleep::spectrogram::Float>(values: &[S], log_indexes: &[S]) -
 
 pub fn gen_log_indexes<S: pleep::spectrogram::Float>(start_at: usize, end_at: usize) -> Vec<S> {
     (start_at..=end_at)
-        .into_iter()
         .map(|index| S::from(index).unwrap().ln())
         .collect()
 }

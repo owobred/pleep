@@ -44,8 +44,7 @@ fn main() {
         &pleep_build::cli::LogSpectrogramSettings {
             height: file.build_settings.spectrogram_height as usize,
             max_frequency: file.build_settings.spectrogram_max_frequency as usize,
-        }
-        .into(),
+        },
     );
 
     // in an ideal world saving a debug image wouldn't require this
@@ -61,7 +60,7 @@ fn main() {
 
         for (segment_index, segment) in file.segments.iter().enumerate() {
             for vector in segment.vectors.iter() {
-                let Some(distance) = distance_cosine(&sample, vector) else {
+                let Some(distance) = distance_cosine(sample, vector) else {
                     continue;
                 };
 
@@ -84,11 +83,8 @@ fn main() {
             .take(options.n_closest_vectors)
             .enumerate()
         {
-            if !out_counter.contains_key(&segment_index) {
-                out_counter.insert(segment_index, 0.0);
-            }
+            let entry = out_counter.entry(segment_index).or_insert(0.0);
 
-            let entry = out_counter.get_mut(&segment_index).unwrap();
             *entry += distance.powi(3) / (score_index + 1) as f32;
         }
     }
@@ -167,16 +163,16 @@ fn save_spectrogram(
 }
 
 fn magnitude_sq(l1: &[f32]) -> f32 {
-    l1.into_iter().map(|v| v.powi(2)).sum()
+    l1.iter().map(|v| v.powi(2)).sum()
 }
 
 fn distance_cosine(l1: &[f32], l2: &[f32]) -> Option<f32> {
-    let numer: f32 = l1.into_iter().zip(l2.into_iter()).map(|(l, r)| l * r).sum();
+    let numer: f32 = l1.iter().zip(l2).map(|(l, r)| l * r).sum();
     let denom = magnitude_sq(l1) * magnitude_sq(l2);
 
     let result = numer / denom.sqrt();
 
-    result.is_finite().then(|| result)
+    result.is_finite().then_some(result)
 }
 
 #[derive(Debug, clap::Parser, Clone)]
@@ -215,7 +211,7 @@ struct Match {
 }
 
 fn scale_results(values: &[f32]) -> Vec<f32> {
-    let sum: f32 = values.into_iter().sum();
+    let sum: f32 = values.iter().sum();
 
-    values.into_iter().map(|v| *v / sum).collect()
+    values.iter().map(|v| *v / sum).collect()
 }
