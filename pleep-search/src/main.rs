@@ -54,7 +54,7 @@ fn main() {
 
     let mut best_matches = Vec::new();
 
-    for sample in spectrogram {
+    for sample in &spectrogram {
         let mut segment_matches = Vec::with_capacity(file.segments.len());
 
         for (segment_index, segment) in file.segments.iter().enumerate() {
@@ -110,7 +110,19 @@ fn main() {
 
     if options.debug_images {
         let best_match = &file.segments[best.first().unwrap().0];
-        save_spectrogram("best.png", best_match.vectors.clone());
+        let best_image = save_spectrogram("best.png", best_match.vectors.clone());
+        let mut difference: image::ImageBuffer<image::Luma<u8>, Vec<_>> = image::ImageBuffer::new(
+            best_image.width().min(spectrogram.len() as u32 - 1),
+            best_image.height().min(spectrogram[0].len() as u32 - 1),
+        );
+        difference.rows_mut().enumerate().for_each(|(y, best_row)| {
+            best_row.into_iter().enumerate().for_each(|(x, best)| {
+                *best = image::Luma([((best_match.vectors[x][y] - spectrogram[x][y]) * 10.0) as u8])
+            })
+        });
+        difference
+            .save("difference.png")
+            .expect("failed to save difference image");
     }
 
     for (index, ((song_index, score), scaled_prob)) in
@@ -136,15 +148,20 @@ fn main() {
     }
 }
 
-fn save_spectrogram(name: &str, vectors: Vec<Vec<f32>>) {
-    let mut canvas: image::ImageBuffer<image::Luma<u8>, Vec<_>> =
-        image::ImageBuffer::new(vectors.len() as u32, vectors[0].len() as u32);
+fn save_spectrogram(
+    name: &str,
+    vectors: Vec<Vec<f32>>,
+) -> image::ImageBuffer<image::Luma<u8>, Vec<u8>> {
+    let mut canvas = image::ImageBuffer::new(vectors.len() as u32, vectors[0].len() as u32);
     for (x, column) in vectors.iter().enumerate() {
         for (y, value) in column.iter().enumerate() {
             canvas.put_pixel(x as u32, y as u32, image::Luma([(*value * 10.0) as u8]));
         }
     }
-    canvas.save(name).expect("failed to save spectrogram debug image");
+    canvas
+        .save(name)
+        .expect("failed to save spectrogram debug image");
+    canvas
 }
 
 fn distance_sq(l1: &[f32], l2: &[f32]) -> f32 {
