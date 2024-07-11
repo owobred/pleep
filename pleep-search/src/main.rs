@@ -135,10 +135,12 @@ fn main() {
             scaled_prob,
         });
         info!(
-            "{: >4}: {} [score={score}] [scaled_prob={scaled_prob}] [duration_difference={:?}]",
+            ?score,
+            ?scaled_prob,
+            duration_difference=?segment.duration.abs_diff(input_audio_duration),
+            "{: >4}: {}",
             index + 1,
             title,
-            segment.duration.abs_diff(input_audio_duration),
         );
     }
 
