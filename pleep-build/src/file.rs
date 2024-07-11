@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 pub struct File {
     pub build_settings: BuildSettings,
     pub segments: Vec<Segment>,
@@ -60,6 +62,7 @@ impl BuildSettings {
 
         Ok(())
     }
+
     pub fn read_from(reader: &mut impl std::io::Read) -> Result<Self, Error> {
         let mut fft_size_buffer = [0; 4];
         reader.read_exact(&mut fft_size_buffer)?;
@@ -117,6 +120,7 @@ impl From<crate::cli::Options> for BuildSettings {
 
 pub struct Segment {
     pub title: String,
+    pub duration: Duration,
     pub vectors: Vec<Vec<f32>>,
 }
 
@@ -124,6 +128,7 @@ impl Segment {
     pub fn write_to(&self, buffer: &mut impl std::io::Write) -> Result<(), Error> {
         buffer.write_all(&(self.title.len() as u32).to_le_bytes())?;
         buffer.write_all(self.title.as_bytes())?;
+        buffer.write_all(&self.duration.as_secs_f32().to_le_bytes())?;
         buffer.write_all(&(self.vectors.len() as u32).to_le_bytes())?;
 
         for vector in &self.vectors {
@@ -144,6 +149,11 @@ impl Segment {
         reader.read_exact(&mut title_buf)?;
         let title = String::from_utf8(title_buf)?;
 
+        let mut duration_seconds_buf = [0; 4];
+        reader.read_exact(&mut duration_seconds_buf)?;
+        let duration_seconds = f32::from_le_bytes(duration_seconds_buf);
+        let duration = Duration::from_secs_f32(duration_seconds);
+
         let mut n_vectors_buf = [0; 4];
         reader.read_exact(&mut n_vectors_buf)?;
         let n_vectors = u32::from_le_bytes(n_vectors_buf);
@@ -163,7 +173,11 @@ impl Segment {
             vectors.push(vector_values);
         }
 
-        Ok(Self { title, vectors })
+        Ok(Self {
+            title,
+            duration,
+            vectors,
+        })
     }
 }
 

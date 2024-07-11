@@ -56,7 +56,7 @@ fn main() {
 
             s.spawn(move |_s| {
                 info!(path=?file, "processing file");
-                let log_spectrogram = file_to_log_spectrogram(
+                let (audio_duration, log_spectrogram) = file_to_log_spectrogram(
                     &file,
                     &spectrogram_settings,
                     &resample_settings,
@@ -66,6 +66,7 @@ fn main() {
                 let segment = pleep_build::file::Segment {
                     title: file.to_string_lossy().to_string(),
                     vectors: log_spectrogram.collect(),
+                    duration: audio_duration,
                 };
 
                 sender.send(segment).expect("failed to send to mpsc");

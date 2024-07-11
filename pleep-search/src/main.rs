@@ -28,7 +28,7 @@ fn main() {
 
     info!(build_settings=?file.build_settings, "read search file");
 
-    let spectrogram = pleep_build::cli::file_to_log_spectrogram(
+    let (input_audio_duration, spectrogram) = pleep_build::cli::file_to_log_spectrogram(
         &options.audio_file,
         &pleep_build::cli::SpectrogramSettings {
             fft_overlap: file.build_settings.fft_overlap as usize,
@@ -127,16 +127,18 @@ fn main() {
     for (index, ((song_index, score), scaled_prob)) in
         best.into_iter().zip(scaled.into_iter()).enumerate()
     {
-        let title = &file.segments[*song_index].title;
+        let segment = &file.segments[*song_index];
+        let title = &segment.title;
         output.matches.push(Match {
             title: title.to_owned(),
             score: *score,
             scaled_prob,
         });
         info!(
-            "{: >4}: {} [score={score}] [scaled_prob={scaled_prob}]",
+            "{: >4}: {} [score={score}] [scaled_prob={scaled_prob}] [duration_difference={:?}]",
             index + 1,
             title,
+            segment.duration.abs_diff(input_audio_duration),
         );
     }
 

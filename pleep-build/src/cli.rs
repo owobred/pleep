@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use tracing::instrument;
 
@@ -85,7 +85,10 @@ pub fn file_to_log_spectrogram(
     spectrogram_settings: &pleep::spectrogram::Settings,
     resample_settings: &pleep_audio::ResampleSettings,
     log_spectrogram_settings: &LogSpectrogramSettings,
-) -> LogSpectrogramIterator<f32, std::vec::IntoIter<f32>> {
+) -> (
+    Duration,
+    LogSpectrogramIterator<f32, std::vec::IntoIter<f32>>,
+) {
     let audio = pleep_audio::ConvertingAudioIterator::new(
         pleep_audio::AudioSource::from_file_path(path).expect("failed to get audio source"),
     )
@@ -99,14 +102,19 @@ pub fn file_to_log_spectrogram(
     .flatten()
     .collect::<Vec<f32>>();
 
-    crate::generate_log_spectrogram(
-        resampled,
-        spectrogram_settings,
-        &crate::LogSpectrogramSettings {
-            height: log_spectrogram_settings.height,
-            frequency_cutoff: log_spectrogram_settings.max_frequency,
-            input_sample_rate: resample_settings.target_sample_rate,
-        },
+    (
+        Duration::from_secs_f64(
+            resampled.len() as f64 / resample_settings.target_sample_rate as f64,
+        ),
+        crate::generate_log_spectrogram(
+            resampled,
+            spectrogram_settings,
+            &crate::LogSpectrogramSettings {
+                height: log_spectrogram_settings.height,
+                frequency_cutoff: log_spectrogram_settings.max_frequency,
+                input_sample_rate: resample_settings.target_sample_rate,
+            },
+        ),
     )
 }
 
