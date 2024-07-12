@@ -129,6 +129,7 @@ fn main() {
     {
         let segment = &file.segments[*song_index];
         let title = &segment.title;
+        let (offset, offset_score) = find_alignment(&segment.vectors, &spectrogram);
         output.matches.push(Match {
             title: title.to_owned(),
             score: *score,
@@ -138,6 +139,8 @@ fn main() {
             ?score,
             ?scaled_prob,
             duration_difference=?segment.duration.abs_diff(input_audio_duration),
+            offset_samples=offset,
+            offset_score=offset_score,
             "{: >4}: {}",
             index + 1,
             title,
@@ -219,4 +222,41 @@ fn scale_results(values: &[f32]) -> Vec<f32> {
     let sum: f32 = values.iter().sum();
 
     values.iter().map(|v| *v / sum).collect()
+}
+
+fn find_alignment(search_in: &[Vec<f32>], search_for: &[Vec<f32>]) -> (isize, f32) {
+    let mut offset_differences = Vec::new();
+    for offset in (-(search_for.len() as isize))..(search_in.len() as isize) {
+        let distances = if offset >= 0 {
+            search_in
+                .iter()
+                .skip(offset as usize)
+                .zip(search_for)
+                .map(|(l, r)| distance_cosine(l, r).unwrap_or(-1.0))
+                .collect::<Vec<_>>()
+        } else {
+            search_for
+                .iter()
+                .skip((-offset) as usize)
+                .zip(search_in)
+                .map(|(l, r)| distance_cosine(l, r).unwrap_or(-1.0))
+                .collect::<Vec<_>>()
+        };
+        let len = distances.len();
+
+        if len < 5 {
+            continue;
+        }
+
+        let total_distance = distances.into_iter().sum::<f32>();
+        let average_distance = total_distance / len as f32;
+        offset_differences.push((offset, average_distance));
+    }
+
+    let (best_offset, best_distancce) = offset_differences
+        .into_iter()
+        .max_by(|(_, l), (_, r)| (l).partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
+        .unwrap();
+
+    (best_offset, best_distancce)
 }
