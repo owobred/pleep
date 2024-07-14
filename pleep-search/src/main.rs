@@ -35,13 +35,35 @@ fn main() {
 
     let num_extra_offsets = 50;
 
+    let threadpool = rayon::ThreadPoolBuilder::new().build().unwrap();
+    let (send, recv) = crossbeam::channel::unbounded();
+
     let mut errors = HashMap::new();
-    for index in 0..=num_extra_offsets {
-        let offset = index * audio.sample_rate / num_extra_offsets;
-        debug!(index, offset, "starting offset");
+    threadpool.scope(|s| {
+        let mut slices = Vec::new();
+        for index in 0..=num_extra_offsets {
+            let offset = index * audio.sample_rate / num_extra_offsets;
+            slices.push((offset, &audio.samples[offset..]));
+        }
 
-        let offset_errors = get_error(&audio.samples[offset..], audio.sample_rate, &file, &options);
+        for (offset, slice) in slices {
+            let file = &file;
+            let options = &options;
+            let send = send.clone();
 
+            s.spawn(move |_s| {
+                debug!(offset, "starting offset");
+    
+                let offset_errors =
+                    get_error(slice, audio.sample_rate, file, options);
+    
+                send.send(offset_errors).unwrap();
+            });
+        }
+    });
+    drop(send);
+
+    while let Ok(offset_errors) = recv.recv() {
         for (index, mse) in offset_errors {
             errors
                 .entry(index)

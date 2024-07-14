@@ -414,10 +414,12 @@ name = "pleep-search"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "crossbeam",
  "image",
  "pleep",
  "pleep-audio",
  "pleep-build",
+ "rayon",
  "serde",
  "serde_json",
  "tracing",
