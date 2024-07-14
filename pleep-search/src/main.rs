@@ -3,8 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use clap::Parser;
 use tracing::{debug, info, warn};
 
-const DEFAULT_MAX_ERROR: f32 = 5.0;
-// const DEFAULT_MAX_ERROR: f32 = 1e-2;
+const DEFAULT_MAX_ERROR: f32 = 10.0;
 const DEFAULT_NUM_RESULTS: usize = 10;
 
 fn main() {
@@ -33,7 +32,7 @@ fn main() {
     .expect("failed to load file")
     .remaining_to_audio();
 
-    let num_extra_offsets = 50;
+    let num_extra_offsets = 100;
 
     let threadpool = rayon::ThreadPoolBuilder::new().build().unwrap();
     let (send, recv) = crossbeam::channel::unbounded();
