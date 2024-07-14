@@ -125,6 +125,7 @@ impl<S: Float, T: Iterator<Item = S>> SpectrogramIterator<S, T> {
             .into_iter()
             .take(self.settings.fft_len / 2)
             .map(num_complex::Complex::norm)
+            .map(|v| v / S::from(self.hann.len()).unwrap().sqrt())
             .collect::<Vec<_>>()
     }
 }

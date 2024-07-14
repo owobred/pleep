@@ -1,10 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
-use tracing::info;
+use tracing::{debug, info, warn};
 
-const DEFAULT_MAX_DISTANCE: f32 = 0.75;
-const DEFAULT_CLOSEST_VECTORS: usize = 5;
+const DEFAULT_MAX_ERROR: f32 = 5.0;
+// const DEFAULT_MAX_ERROR: f32 = 1e-2;
 const DEFAULT_NUM_RESULTS: usize = 10;
 
 fn main() {
@@ -23,134 +23,77 @@ fn main() {
     let options = Options::parse();
 
     let mut reader = std::io::BufReader::new(std::fs::File::open(&options.lookup_file).unwrap());
-
     let file = pleep_build::file::File::read_from(&mut reader).unwrap();
-
     info!(build_settings=?file.build_settings, "read search file");
 
-    let (input_audio_duration, spectrogram) = pleep_build::cli::file_to_log_spectrogram(
-        &options.audio_file,
-        &pleep_build::cli::SpectrogramSettings {
-            fft_overlap: file.build_settings.fft_overlap as usize,
-            fft_size: file.build_settings.fft_size as usize,
-        }
-        .into(),
-        &pleep_build::cli::ResampleSettings {
-            resample_rate: file.build_settings.resample_rate as usize,
-            chunk_size: file.build_settings.resample_chunk_size as usize,
-            sub_chunks: file.build_settings.resample_sub_chunks as usize,
-        }
-        .into(),
-        &pleep_build::cli::LogSpectrogramSettings {
-            height: file.build_settings.spectrogram_height as usize,
-            max_frequency: file.build_settings.spectrogram_max_frequency as usize,
-        },
-    );
+    let audio: pleep_audio::Audio<f32> = pleep_audio::ConvertingAudioIterator::new(
+        pleep_audio::AudioSource::from_file_path(&options.audio_file)
+            .expect("failed to get audio source"),
+    )
+    .expect("failed to load file")
+    .remaining_to_audio();
 
-    // in an ideal world saving a debug image wouldn't require this
-    let spectrogram = spectrogram.collect::<Vec<_>>();
-    if options.debug_images {
-        save_spectrogram("input.png", &spectrogram);
-    }
+    let num_extra_offsets = 50;
 
-    let mut out_counter = HashMap::new();
+    let mut errors = HashMap::new();
+    for index in 0..=num_extra_offsets {
+        let offset = index * audio.sample_rate / num_extra_offsets;
+        debug!(index, offset, "starting offset");
 
-    for sample in &spectrogram {
-        let mut sample_distances = Vec::new();
+        let offset_errors = get_error(&audio.samples[offset..], audio.sample_rate, &file, &options);
 
-        for (segment_index, segment) in file.segments.iter().enumerate() {
-            for vector in &segment.vectors {
-                let Some(distance) = distance_cosine(sample, vector) else {
-                    continue;
-                };
-
-                if distance < options.max_distance {
-                    continue;
-                }
-
-                sample_distances.push((segment_index, distance));
-            }
-        }
-
-        sample_distances.sort_by(|(_, l), (_, r)| {
-            l.partial_cmp(r)
-                .unwrap_or(std::cmp::Ordering::Greater)
-                .reverse()
-        });
-
-        for (score_index, (segment_index, distance)) in sample_distances
-            .into_iter()
-            .take(options.n_closest_vectors)
-            .enumerate()
-        {
-            let entry = out_counter.entry(segment_index).or_insert(0.0);
-
-            *entry += distance.powi(3) / (score_index + 1) as f32;
+        for (index, mse) in offset_errors {
+            errors
+                .entry(index)
+                .and_modify(|v| *v = mse.min(*v))
+                .or_insert(f32::INFINITY);
         }
     }
 
-    info!("completed matching samples");
+    let mut best = errors.into_iter().collect::<Vec<_>>();
 
-    let mut best = out_counter.into_iter().collect::<Vec<_>>();
-
-    best.sort_by(|(_, left), (_, right)| {
-        left.partial_cmp(right)
-            .unwrap_or(std::cmp::Ordering::Greater)
-            .reverse()
-    });
-
-    let mut output = CommandOutput {
-        matches: Vec::with_capacity(options.n_results),
-    };
-
-    let best = best.iter().take(options.n_results).collect::<Vec<_>>();
-    let scaled = scale_results(&best.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+    best.sort_by(|(_, l), (_, r)| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less));
 
     if options.debug_images {
-        let best_match = &file.segments[best.first().unwrap().0];
-        let best_image = save_spectrogram("best.png", &best_match.vectors);
-        let mut difference: image::ImageBuffer<image::Luma<u8>, Vec<_>> = image::ImageBuffer::new(
-            best_image.width().min(spectrogram.len() as u32),
-            best_image.height().min(spectrogram[0].len() as u32),
-        );
-        difference.rows_mut().enumerate().for_each(|(y, best_row)| {
-            best_row.into_iter().enumerate().for_each(|(x, best)| {
-                *best =
-                    image::Luma([((best_match.vectors[x][y] - spectrogram[x][y]) * 10.0) as u8]);
-            });
-        });
-        difference
-            .save("difference.png")
-            .expect("failed to save difference image");
+        if best.len() > 0 {
+            let best_section = &file.segments[best[0].0];
+            save_spectrogram("best.png", &best_section.vectors);
+        } else {
+            warn!("no best image, not creating best.png");
+        }
     }
 
-    for (index, ((song_index, score), scaled_prob)) in
-        best.into_iter().zip(scaled.into_iter()).enumerate()
-    {
-        let segment = &file.segments[*song_index];
-        let title = &segment.title;
-        let (offset, offset_score) = find_alignment(&segment.vectors, &spectrogram);
-        output.matches.push(Match {
-            title: title.to_owned(),
-            score: *score,
-            scaled_prob,
-        });
+    let top_n = best.into_iter().take(options.n_results).collect::<Vec<_>>();
+
+    let (_, max_observed_mse) = top_n
+        .iter()
+        .max_by(|(_, l), (_, r)| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
+        .unwrap();
+
+    for (index, (segment_index, mse)) in top_n.iter().enumerate() {
         info!(
-            ?score,
-            ?scaled_prob,
-            duration_difference=?segment.duration.abs_diff(input_audio_duration),
-            offset_samples=offset,
-            offset_score=offset_score,
-            "{: >4}: {}",
-            index + 1,
-            title,
+            mse,
+            neg_scaled_mse = 1.0 - mse / max_observed_mse,
+            confidence = (options.max_error - mse) / options.max_error,
+            "{index: >4}: {}",
+            file.segments[*segment_index].title
         );
     }
 
     if options.json {
-        let json = serde_json::to_string(&output).unwrap();
-
-        print!("{json}");
+        print!(
+            "{}",
+            serde_json::to_string(&CommandOutput {
+                matches: top_n
+                    .into_iter()
+                    .map(|(segment_index, score)| Match {
+                        title: file.segments[segment_index].title.clone(),
+                        score
+                    })
+                    .collect()
+            })
+            .unwrap()
+        );
     }
 }
 
@@ -158,10 +101,26 @@ fn save_spectrogram(
     name: &str,
     vectors: &[Vec<f32>],
 ) -> image::ImageBuffer<image::Luma<u8>, Vec<u8>> {
+    let min = *vectors
+        .iter()
+        .flatten()
+        .min_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
+        .unwrap();
+    let max = *vectors
+        .iter()
+        .flatten()
+        .max_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
+        .unwrap();
+    let difference = max - min;
+
     let mut canvas = image::ImageBuffer::new(vectors.len() as u32, vectors[0].len() as u32);
     for (x, column) in vectors.iter().enumerate() {
         for (y, value) in column.iter().enumerate() {
-            canvas.put_pixel(x as u32, y as u32, image::Luma([(*value * 10.0) as u8]));
+            canvas.put_pixel(
+                x as u32,
+                y as u32,
+                image::Luma([((*value * 255.0 - min) / difference) as u8]),
+            );
         }
     }
     canvas
@@ -170,17 +129,8 @@ fn save_spectrogram(
     canvas
 }
 
-fn magnitude_sq(l1: &[f32]) -> f32 {
-    l1.iter().map(|v| v.powi(2)).sum()
-}
-
-fn distance_cosine(l1: &[f32], l2: &[f32]) -> Option<f32> {
-    let numer: f32 = l1.iter().zip(l2).map(|(l, r)| l * r).sum();
-    let denom = magnitude_sq(l1) * magnitude_sq(l2);
-
-    let result = numer / denom.sqrt();
-
-    result.is_finite().then_some(result)
+fn distance_sq(l1: &[f32], l2: &[f32]) -> f32 {
+    l1.iter().zip(l2).map(|(l, r)| (l - r).powi(2)).sum()
 }
 
 #[derive(Debug, clap::Parser, Clone)]
@@ -189,12 +139,9 @@ struct Options {
     lookup_file: PathBuf,
     /// File that audio should be read from
     audio_file: PathBuf,
-    /// Maximum distance to consider points at
-    #[arg(long, default_value_t = DEFAULT_MAX_DISTANCE)]
-    max_distance: f32,
-    /// Number of vectors to consider when comparing vectors
-    #[arg(long, default_value_t = DEFAULT_CLOSEST_VECTORS)]
-    n_closest_vectors: usize,
+    /// Maximum mse to consider windows at
+    #[arg(long, default_value_t = DEFAULT_MAX_ERROR)]
+    max_error: f32,
     /// Number of results to display
     #[arg(long, default_value_t = DEFAULT_NUM_RESULTS)]
     n_results: usize,
@@ -215,48 +162,85 @@ struct CommandOutput {
 struct Match {
     title: String,
     score: f32,
-    scaled_prob: f32,
 }
 
-fn scale_results(values: &[f32]) -> Vec<f32> {
-    let sum: f32 = values.iter().sum();
+fn get_error(
+    samples: &[f32],
+    sample_rate: usize,
+    file: &pleep_build::file::File,
+    options: &Options,
+) -> HashMap<usize, f32> {
+    let resample = pleep_audio::ResamplingChunksIterator::new(
+        samples.iter().copied(),
+        sample_rate,
+        pleep_build::cli::ResampleSettings {
+            resample_rate: file.build_settings.resample_rate as usize,
+            chunk_size: file.build_settings.resample_chunk_size as usize,
+            sub_chunks: file.build_settings.resample_sub_chunks as usize,
+        }
+        .into(),
+    )
+    .unwrap();
 
-    values.iter().map(|v| *v / sum).collect()
-}
+    let mut spectrogram = pleep_build::generate_log_spectrogram(
+        resample.flatten().collect::<Vec<_>>(),
+        &pleep_build::cli::SpectrogramSettings {
+            fft_overlap: file.build_settings.fft_overlap as usize,
+            fft_size: file.build_settings.fft_size as usize,
+        }
+        .into(),
+        &pleep_build::LogSpectrogramSettings {
+            height: file.build_settings.spectrogram_height as usize,
+            frequency_cutoff: file.build_settings.spectrogram_max_frequency as usize,
+            input_sample_rate: file.build_settings.resample_rate as usize,
+        },
+    )
+    .collect::<Vec<_>>();
 
-fn find_alignment(search_in: &[Vec<f32>], search_for: &[Vec<f32>]) -> (isize, f32) {
-    let mut offset_differences = Vec::new();
-    for offset in (-(search_for.len() as isize))..(search_in.len() as isize) {
-        let distances = if offset >= 0 {
-            search_in
+    // TODO: make this only happen on one iteration
+    // if options.debug_images {
+    //     save_spectrogram("input.png", &spectrogram);
+    // }
+
+    let empty_vec = vec![0.0; spectrogram[0].len()];
+    spectrogram.resize(spectrogram.len() + 3, empty_vec.clone());
+    spectrogram.reverse();
+    spectrogram.resize(spectrogram.len() + 3, empty_vec.clone());
+    spectrogram.reverse();
+
+    let before_len = file.segments.len();
+    let filtered_segments = file
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(_, segment)| segment.vectors.len() <= spectrogram.len())
+        .collect::<Vec<_>>();
+    debug!(
+        before_len,
+        after_len = filtered_segments.len(),
+        "trimmed segments"
+    );
+
+    let mut scores = HashMap::new();
+
+    for (segment_index, segment) in &filtered_segments {
+        let mut min_error = f32::INFINITY;
+        for spectrogram_window in spectrogram.windows(segment.vectors.len()) {
+            let error = spectrogram_window
                 .iter()
-                .skip(offset as usize)
-                .zip(search_for)
-                .map(|(l, r)| distance_cosine(l, r).unwrap_or(-1.0))
-                .collect::<Vec<_>>()
-        } else {
-            search_for
-                .iter()
-                .skip((-offset) as usize)
-                .zip(search_in)
-                .map(|(l, r)| distance_cosine(l, r).unwrap_or(-1.0))
-                .collect::<Vec<_>>()
-        };
-        let len = distances.len();
+                .zip(segment.vectors.iter())
+                .map(|(spect_vect, segmenmt_vect)| distance_sq(&spect_vect, &segmenmt_vect))
+                .sum::<f32>()
+                / spectrogram_window.len() as f32;
+            min_error = min_error.min(error);
+        }
 
-        if len < 5 {
+        if min_error > options.max_error {
             continue;
         }
 
-        let total_distance = distances.into_iter().sum::<f32>();
-        let average_distance = total_distance / len as f32;
-        offset_differences.push((offset, average_distance));
+        scores.insert(*segment_index, min_error);
     }
 
-    let (best_offset, best_distancce) = offset_differences
-        .into_iter()
-        .max_by(|(_, l), (_, r)| (l).partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
-        .unwrap();
-
-    (best_offset, best_distancce)
+    scores
 }

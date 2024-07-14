@@ -1,3 +1,5 @@
+#![feature(array_windows)]
+
 use std::path::PathBuf;
 
 use pleep::spectrogram::SpectrogramIterator;
@@ -47,23 +49,42 @@ fn get_files_recursive(
 }
 
 #[instrument(skip(values), level = "trace")]
-pub fn make_log<S: pleep::spectrogram::Float>(values: &[S], log_indexes: &[S]) -> Vec<S> {
-    let last_point_ln = S::from(values.len()).unwrap().ln();
-    let mut new = vec![S::zero(); log_indexes.len()];
+pub fn make_log<S: pleep::spectrogram::Float>(values: &[S], out_height: usize) -> Vec<S> {
+    let mut new = vec![S::zero(); out_height];
 
-    for (index, log_index) in log_indexes.iter().enumerate() {
-        let point = *log_index / last_point_ln * S::from(values.len()).unwrap();
-        new[index] = values[point.to_usize().unwrap_or(0)];
+    // TODO: put this value in the build file
+    let a = 10.0f64;
+
+    for (index, [last_index, next_index]) in (0..=out_height)
+        .map(|index| {
+            let frac = index as f64 / out_height as f64;
+            ((a.powf(frac) - 1.0) / (a - 1.0) * values.len() as f64) as usize
+        })
+        .collect::<Vec<_>>()
+        .array_windows()
+        .enumerate()
+    {
+        // TODO: decide on the best way to find a value for a pixel
+        let to_average = &values[*last_index..*next_index];
+        // let average = average(to_average);
+
+        // new[index] = average;
+        new[index] = *to_average
+            .iter()
+            .max_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
+            .unwrap();
+        // new[index] = values[*last_index];
     }
 
     new
 }
 
-pub fn gen_log_indexes<S: pleep::spectrogram::Float>(start_at: usize, end_at: usize) -> Vec<S> {
-    (start_at..=end_at)
-        .map(|index| S::from(index).unwrap().ln())
-        .collect()
-}
+// TODO: remove if unused in ^^^
+// fn average<S: pleep::spectrogram::Float>(values: &[S]) -> S {
+//     let count = values.len();
+//
+//     S::from(values.iter().map(|v| v.to_f64().unwrap()).sum::<f64>() / count as f64).unwrap()
+// }
 
 #[instrument(skip(samples), level = "trace")]
 pub fn generate_log_spectrogram<S: pleep::spectrogram::Float, I: Iterator<Item = S>>(
@@ -85,26 +106,20 @@ pub fn generate_log_spectrogram<S: pleep::spectrogram::Float, I: Iterator<Item =
     );
     let cutoff_bin = cutoff_bin as usize;
 
-    LogSpectrogramIterator::new(spectrogram, settings, cutoff_bin)
+    LogSpectrogramIterator::new(spectrogram, settings.height, cutoff_bin)
 }
 
 pub struct LogSpectrogramIterator<S: pleep::spectrogram::Float, I: Iterator<Item = S>> {
     inner: SpectrogramIterator<S, I>,
     cutoff_bin: usize,
-    log_indexes: Vec<S>,
+    height: usize,
 }
 
 impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> LogSpectrogramIterator<S, I> {
-    pub fn new(
-        spectrogram: SpectrogramIterator<S, I>,
-        settings: &LogSpectrogramSettings,
-        cutoff_bin: usize,
-    ) -> Self {
-        let log_indexes = gen_log_indexes(0, settings.height - 1);
-
+    pub fn new(spectrogram: SpectrogramIterator<S, I>, height: usize, cutoff_bin: usize) -> Self {
         Self {
             inner: spectrogram,
-            log_indexes,
+            height,
             cutoff_bin,
         }
     }
@@ -123,7 +138,7 @@ impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> Iterator
         self.inner.next().map(|mut col| {
             col.resize(self.cutoff_bin, S::zero());
 
-            make_log(&col, &self.log_indexes)
+            make_log(&col, self.height)
         })
     }
 }
