@@ -59,16 +59,17 @@ fn main() {
             let best_section = &file.segments[best[0].0];
             save_spectrogram("best.png", &best_section.vectors);
         } else {
-            warn!("no best image, not creating best.png");
+            warn!("no best segment, not creating best.png");
         }
     }
 
     let top_n = best.into_iter().take(options.n_results).collect::<Vec<_>>();
 
-    let (_, max_observed_mse) = top_n
+    let max_observed_mse = top_n
         .iter()
-        .max_by(|(_, l), (_, r)| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
-        .unwrap();
+        .map(|(_, mse)| *mse)
+        .max_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
+        .unwrap_or(f32::INFINITY);
 
     for (index, (segment_index, mse)) in top_n.iter().enumerate() {
         info!(
