@@ -20,6 +20,7 @@ fn main() {
     }
 
     let options = Options::parse();
+    let start = std::time::Instant::now();
 
     let mut reader = std::io::BufReader::new(std::fs::File::open(&options.lookup_file).unwrap());
     let file = pleep_build::file::File::read_from(&mut reader).unwrap();
@@ -54,7 +55,9 @@ fn main() {
         threadpool.scope(|s| {
             let mut slices = Vec::new();
             for index in 0..=num_extra_offsets {
-                let offset = index * audio.sample_rate / num_extra_offsets;
+                let offset = (index * audio.sample_rate * file.build_settings.fft_size as usize
+                    / file.build_settings.resample_rate as usize)
+                    / num_extra_offsets;
                 slices.push((offset, &audio.samples[offset..]));
             }
 
@@ -107,6 +110,8 @@ fn main() {
         .map(|(_, mse)| *mse)
         .max_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
         .unwrap_or(f32::INFINITY);
+    
+    let elapsed_time = start.elapsed();
 
     for (index, (segment_index, mse)) in top_n.iter().enumerate() {
         info!(
@@ -117,6 +122,7 @@ fn main() {
             file.segments[*segment_index].title
         );
     }
+    debug!(?elapsed_time, "done");
 
     if options.json {
         print!(
