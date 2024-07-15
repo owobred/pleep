@@ -45,6 +45,9 @@ pub struct LogSpectrogramSettings {
     /// Maximum frequency of the log spectrogram
     #[arg(long = "spectrogram-max-frequency", default_value_t = DEFAULT_MAX_FREQUENCY, value_parser = parse_frequency)]
     pub max_frequency: usize,
+    /// The base the use when transforming to a log graph
+    #[arg(long, default_value_t = 9.5)]
+    pub log_base: f32,
 }
 
 impl From<SpectrogramSettings> for pleep::spectrogram::Settings {
@@ -113,6 +116,7 @@ pub fn file_to_log_spectrogram(
                 height: log_spectrogram_settings.height,
                 frequency_cutoff: log_spectrogram_settings.max_frequency,
                 input_sample_rate: resample_settings.target_sample_rate,
+                base: log_spectrogram_settings.log_base,
             },
         ),
     )

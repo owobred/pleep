@@ -49,16 +49,19 @@ fn get_files_recursive(
 }
 
 #[instrument(skip(values), level = "trace")]
-pub fn make_log<S: pleep::spectrogram::Float>(values: &[S], out_height: usize) -> Vec<S> {
+pub fn make_log<S: pleep::spectrogram::Float>(
+    values: &[S],
+    out_height: usize,
+    base: f32,
+) -> Vec<S> {
     let mut new = vec![S::zero(); out_height];
 
-    // TODO: put this value in the build file
-    let a = 10.0f64;
+    let base = base as f64;
 
     for (index, [last_index, next_index]) in (0..=out_height)
         .map(|index| {
             let frac = index as f64 / out_height as f64;
-            ((a.powf(frac) - 1.0) / (a - 1.0) * values.len() as f64) as usize
+            ((base.powf(frac) - 1.0) / (base - 1.0) * values.len() as f64) as usize
         })
         .collect::<Vec<_>>()
         .array_windows()
@@ -106,21 +109,23 @@ pub fn generate_log_spectrogram<S: pleep::spectrogram::Float, I: Iterator<Item =
     );
     let cutoff_bin = cutoff_bin as usize;
 
-    LogSpectrogramIterator::new(spectrogram, settings.height, cutoff_bin)
+    LogSpectrogramIterator::new(spectrogram, settings.height, cutoff_bin, settings.base)
 }
 
 pub struct LogSpectrogramIterator<S: pleep::spectrogram::Float, I: Iterator<Item = S>> {
     inner: SpectrogramIterator<S, I>,
     cutoff_bin: usize,
     height: usize,
+    base: f32,
 }
 
 impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> LogSpectrogramIterator<S, I> {
-    pub fn new(spectrogram: SpectrogramIterator<S, I>, height: usize, cutoff_bin: usize) -> Self {
+    pub fn new(spectrogram: SpectrogramIterator<S, I>, height: usize, cutoff_bin: usize, base: f32) -> Self {
         Self {
             inner: spectrogram,
             height,
             cutoff_bin,
+            base,
         }
     }
 
@@ -138,7 +143,7 @@ impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> Iterator
         self.inner.next().map(|mut col| {
             col.resize(self.cutoff_bin, S::zero());
 
-            make_log(&col, self.height)
+            make_log(&col, self.height, self.base)
         })
     }
 }
@@ -148,4 +153,5 @@ pub struct LogSpectrogramSettings {
     pub height: usize,
     pub frequency_cutoff: usize,
     pub input_sample_rate: usize,
+    pub base: f32,
 }

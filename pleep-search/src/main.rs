@@ -252,6 +252,7 @@ fn get_error(
             height: build_settings.spectrogram_height as usize,
             frequency_cutoff: build_settings.spectrogram_max_frequency as usize,
             input_sample_rate: build_settings.resample_rate as usize,
+            base: build_settings.log_base,
         },
     )
     .collect::<VecDeque<_>>();

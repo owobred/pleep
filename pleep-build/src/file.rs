@@ -49,6 +49,7 @@ pub struct BuildSettings {
     pub resample_rate: u32,
     pub resample_chunk_size: u32,
     pub resample_sub_chunks: u32,
+    pub log_base: f32,
 }
 
 impl BuildSettings {
@@ -60,6 +61,7 @@ impl BuildSettings {
         buffer.write_all(&self.resample_rate.to_le_bytes())?;
         buffer.write_all(&self.resample_chunk_size.to_le_bytes())?;
         buffer.write_all(&self.resample_sub_chunks.to_le_bytes())?;
+        buffer.write_all(&self.log_base.to_le_bytes())?;
 
         Ok(())
     }
@@ -93,6 +95,10 @@ impl BuildSettings {
         reader.read_exact(&mut resample_sub_chunks_buffer)?;
         let resample_sub_chunks = u32::from_le_bytes(resample_sub_chunks_buffer);
 
+        let mut log_base_buffer = [0; 4];
+        reader.read_exact(&mut log_base_buffer)?;
+        let log_base = f32::from_le_bytes(log_base_buffer);
+
         Ok(Self {
             fft_size,
             fft_overlap,
@@ -101,6 +107,7 @@ impl BuildSettings {
             resample_rate,
             resample_chunk_size,
             resample_sub_chunks,
+            log_base,
         })
     }
 }
@@ -115,6 +122,7 @@ impl From<crate::cli::Options> for BuildSettings {
             resample_rate: value.resampler.resample_rate as u32,
             resample_chunk_size: value.resampler.chunk_size as u32,
             resample_sub_chunks: value.resampler.sub_chunks as u32,
+            log_base: value.log_settings.log_base,
         }
     }
 }
