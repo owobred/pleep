@@ -8,6 +8,11 @@ use tracing::{debug, info, warn};
 
 const DEFAULT_MAX_ERROR: f32 = 10.0;
 const DEFAULT_NUM_RESULTS: usize = 10;
+const DEFAULT_EXTRA_OFFSETS: usize = 10;
+const DEFAULT_SEGMENT_TRIM_SIZE: usize = 20;
+const DEFAULT_SEGMENT_TRIM_STEP: usize = 3;
+const DEFAULT_MIN_VECTORS: usize = 6;
+const DEFAULT_SPECTROGRAM_PADDING: usize = 3;
 
 fn main() {
     {
@@ -36,19 +41,13 @@ fn main() {
     .expect("failed to load file")
     .remaining_to_audio();
 
-    let num_extra_offsets = 10;
-    // let num_extra_offsets = 25;
-    let num_extra_start_vectors_to_remove = 11;
-    let remove_samples_step = 2;
-    let min_num_vectors = 6;
-
     let threadpool = rayon::ThreadPoolBuilder::new().build().unwrap();
     let (send, recv) = crossbeam::channel::unbounded();
 
     let mut errors = vec![f32::INFINITY; file.segments.len()];
     let mut trimmed_segments = Vec::new();
 
-    for remove_pre in (0..=num_extra_start_vectors_to_remove).step_by(remove_samples_step) {
+    for remove_pre in (0..=options.segment_trim_size).step_by(options.segment_trim_step) {
         let trimmed = file
             .segments
             .iter()
@@ -61,10 +60,10 @@ fn main() {
     threadpool.scope(|s| {
         for trimmed in &trimmed_segments {
             let mut slices = Vec::new();
-            for index in 0..=num_extra_offsets {
+            for index in 0..=options.extra_offsets {
                 let offset = (index * audio.sample_rate * file.build_settings.fft_size as usize
                     / file.build_settings.resample_rate as usize)
-                    / num_extra_offsets;
+                    / options.extra_offsets;
                 slices.push((offset, &audio.samples[offset..]));
             }
 
@@ -81,8 +80,9 @@ fn main() {
                         audio.sample_rate,
                         build_settings,
                         options,
-                        min_num_vectors,
+                        options.min_vectors,
                         &trimmed,
+                        options.spectrogram_padding,
                     );
 
                     send.send(offset_errors).unwrap();
@@ -208,6 +208,21 @@ struct Options {
     /// Generate some debug spectrograms for the fun of it
     #[arg(long, action = clap::ArgAction::SetTrue)]
     debug_images: bool,
+    /// The number of different offsets to try when creating shifted spectrograms
+    #[arg(long, default_value_t = DEFAULT_EXTRA_OFFSETS)]
+    extra_offsets: usize,
+    /// Maximum number of vectors to remove from the beginning of segments when matching vectors
+    #[arg(long, default_value_t = DEFAULT_SEGMENT_TRIM_SIZE)]
+    segment_trim_size: usize,
+    /// Step size when testing segments with reduced samples
+    #[arg(long, default_value_t = DEFAULT_SEGMENT_TRIM_STEP)]
+    segment_trim_step: usize,
+    /// Minimum number of vectors a segment must have to be considered
+    #[arg(long, default_value_t = DEFAULT_MIN_VECTORS)]
+    min_vectors: usize,
+    /// Padding to apply to spectrograms
+    #[arg(long, default_value_t = DEFAULT_SPECTROGRAM_PADDING)]
+    spectrogram_padding: usize,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -228,6 +243,7 @@ fn get_error(
     options: &Options,
     skip_less_than: usize,
     segments: &[&[Vec<f32>]],
+    spectrogram_padding: usize,
 ) -> HashMap<usize, f32> {
     let resample = pleep_audio::ResamplingChunksIterator::new(
         samples.iter().copied(),
@@ -265,7 +281,7 @@ fn get_error(
     // }
 
     let empty_vec = vec![0.0; spectrogram[0].len()];
-    for _ in 0..3 {
+    for _ in 0..spectrogram_padding {
         spectrogram.push_front(empty_vec.clone());
         spectrogram.push_back(empty_vec.clone());
     }
