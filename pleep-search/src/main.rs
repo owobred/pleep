@@ -106,7 +106,11 @@ fn main() {
         }
     }
 
-    let mut best = errors.into_iter().enumerate().collect::<Vec<_>>();
+    let mut best = errors
+        .into_iter()
+        .enumerate()
+        .filter(|(_, mse)| mse.is_finite())
+        .collect::<Vec<_>>();
 
     best.sort_by(|(_, l), (_, r)| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less));
 
@@ -259,7 +263,7 @@ fn get_error(
     )
     .collect::<VecDeque<_>>();
 
-    debug!(len=spectrogram.len(), "created spectrogram");
+    debug!(len = spectrogram.len(), "created spectrogram");
 
     // TODO: make this only happen on one iteration
     // if options.debug_images {
