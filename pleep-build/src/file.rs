@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct File {
     pub build_settings: BuildSettings,
     pub segments: Vec<Segment>,
@@ -118,6 +119,7 @@ impl From<crate::cli::Options> for BuildSettings {
     }
 }
 
+#[derive(Clone)]
 pub struct Segment {
     pub title: String,
     pub duration: Duration,

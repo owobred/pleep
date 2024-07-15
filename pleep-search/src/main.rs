@@ -32,46 +32,62 @@ fn main() {
     .expect("failed to load file")
     .remaining_to_audio();
 
-    let num_extra_offsets = 100;
+    let num_extra_offsets = 10;
+    // let num_extra_offsets = 25;
+    let num_extra_start_vectors_to_remove = 11;
+    let remove_samples_step = 2;
+    let min_num_vectors = 6;
 
     let threadpool = rayon::ThreadPoolBuilder::new().build().unwrap();
     let (send, recv) = crossbeam::channel::unbounded();
 
-    let mut errors = HashMap::new();
-    threadpool.scope(|s| {
-        let mut slices = Vec::new();
-        for index in 0..=num_extra_offsets {
-            let offset = index * audio.sample_rate / num_extra_offsets;
-            slices.push((offset, &audio.samples[offset..]));
-        }
+    let mut errors = vec![f32::INFINITY; file.segments.len()];
+    for remove_pre in (0..=num_extra_start_vectors_to_remove).step_by(remove_samples_step) {
+        debug!(remove_pre, "starting trim");
+        let mut file = file.clone();
+        file.segments.iter_mut().for_each(|segment| {
+            segment.vectors.reverse();
+            segment.vectors.truncate(segment.vectors.len() - remove_pre);
+            segment.vectors.reverse();
+        });
 
-        for (offset, slice) in slices {
-            let file = &file;
-            let options = &options;
-            let send = send.clone();
+        threadpool.scope(|s| {
+            let mut slices = Vec::new();
+            for index in 0..=num_extra_offsets {
+                let offset = index * audio.sample_rate / num_extra_offsets;
+                slices.push((offset, &audio.samples[offset..]));
+            }
 
-            s.spawn(move |_s| {
-                debug!(offset, "starting offset");
-    
-                let offset_errors =
-                    get_error(slice, audio.sample_rate, file, options);
-    
-                send.send(offset_errors).unwrap();
-            });
-        }
-    });
+            for (offset, slice) in slices {
+                let file = &file;
+                let options = &options;
+                let send = send.clone();
+
+                s.spawn(move |_s| {
+                    debug!(offset, "starting offset");
+
+                    let offset_errors =
+                        get_error(slice, audio.sample_rate, file, options, min_num_vectors);
+
+                    send.send(offset_errors).unwrap();
+                });
+            }
+        });
+    }
     drop(send);
 
+    debug!("merging errors");
     while let Ok(offset_errors) = recv.recv() {
         for (index, mse) in offset_errors {
-            errors
-                .entry(index)
-                .and_modify(|v| *v = mse.min(*v))
-                .or_insert(f32::INFINITY);
+            // errors
+            //     .entry(index)
+            //     .and_modify(|v| *v = mse.min(*v))
+            //     .or_insert(f32::INFINITY);
+            errors[index] = errors[index].min(mse)
         }
     }
 
-    let mut best = errors.into_iter().collect::<Vec<_>>();
+    let mut best = errors.into_iter().enumerate().collect::<Vec<_>>();
 
     best.sort_by(|(_, l), (_, r)| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less));
 
@@ -191,6 +207,7 @@ fn get_error(
     sample_rate: usize,
     file: &pleep_build::file::File,
     options: &Options,
+    skip_less_than: usize,
 ) -> HashMap<usize, f32> {
     let resample = pleep_audio::ResamplingChunksIterator::new(
         samples.iter().copied(),
@@ -236,6 +253,7 @@ fn get_error(
         .iter()
         .enumerate()
         .filter(|(_, segment)| segment.vectors.len() <= spectrogram.len())
+        .filter(|(_, segment)| segment.vectors.len() >= skip_less_than)
         .collect::<Vec<_>>();
     debug!(
         before_len,
