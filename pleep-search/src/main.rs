@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::PathBuf,
+};
 
 use clap::Parser;
 use tracing::{debug, info, warn};
@@ -43,14 +46,20 @@ fn main() {
     let (send, recv) = crossbeam::channel::unbounded();
 
     let mut errors = vec![f32::INFINITY; file.segments.len()];
+    // let mut trimmed_segments = file
+    //     .segments
+    //     .clone()
+    //     .into_iter()
+    //     .map(|segment| segment.vectors.into())
+    //     .collect::<Vec<VecDeque<_>>>();
     for remove_pre in (0..=num_extra_start_vectors_to_remove).step_by(remove_samples_step) {
         debug!(remove_pre, "starting trim");
-        let mut file = file.clone();
-        file.segments.iter_mut().for_each(|segment| {
-            segment.vectors.reverse();
-            segment.vectors.truncate(segment.vectors.len() - remove_pre);
-            segment.vectors.reverse();
-        });
+
+        let trimmed = file
+            .segments
+            .iter()
+            .map(|segment| &segment.vectors[(remove_pre.min(segment.vectors.len()))..])
+            .collect::<Vec<_>>();
 
         threadpool.scope(|s| {
             let mut slices = Vec::new();
@@ -62,15 +71,22 @@ fn main() {
             }
 
             for (offset, slice) in slices {
-                let file = &file;
+                let build_settings = &file.build_settings;
                 let options = &options;
                 let send = send.clone();
+                let trimmed_segments = &trimmed;
 
                 s.spawn(move |_s| {
                     debug!(offset, "starting offset");
 
-                    let offset_errors =
-                        get_error(slice, audio.sample_rate, file, options, min_num_vectors);
+                    let offset_errors = get_error(
+                        slice,
+                        audio.sample_rate,
+                        build_settings,
+                        options,
+                        min_num_vectors,
+                        trimmed_segments,
+                    );
 
                     send.send(offset_errors).unwrap();
                 });
@@ -110,7 +126,7 @@ fn main() {
         .map(|(_, mse)| *mse)
         .max_by(|l, r| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less))
         .unwrap_or(f32::INFINITY);
-    
+
     let elapsed_time = start.elapsed();
 
     for (index, (segment_index, mse)) in top_n.iter().enumerate() {
@@ -211,17 +227,18 @@ struct Match {
 fn get_error(
     samples: &[f32],
     sample_rate: usize,
-    file: &pleep_build::file::File,
+    build_settings: &pleep_build::file::BuildSettings,
     options: &Options,
     skip_less_than: usize,
+    segments: &[&[Vec<f32>]],
 ) -> HashMap<usize, f32> {
     let resample = pleep_audio::ResamplingChunksIterator::new(
         samples.iter().copied(),
         sample_rate,
         pleep_build::cli::ResampleSettings {
-            resample_rate: file.build_settings.resample_rate as usize,
-            chunk_size: file.build_settings.resample_chunk_size as usize,
-            sub_chunks: file.build_settings.resample_sub_chunks as usize,
+            resample_rate: build_settings.resample_rate as usize,
+            chunk_size: build_settings.resample_chunk_size as usize,
+            sub_chunks: build_settings.resample_sub_chunks as usize,
         }
         .into(),
     )
@@ -230,17 +247,19 @@ fn get_error(
     let mut spectrogram = pleep_build::generate_log_spectrogram(
         resample.flatten().collect::<Vec<_>>(),
         &pleep_build::cli::SpectrogramSettings {
-            fft_overlap: file.build_settings.fft_overlap as usize,
-            fft_size: file.build_settings.fft_size as usize,
+            fft_overlap: build_settings.fft_overlap as usize,
+            fft_size: build_settings.fft_size as usize,
         }
         .into(),
         &pleep_build::LogSpectrogramSettings {
-            height: file.build_settings.spectrogram_height as usize,
-            frequency_cutoff: file.build_settings.spectrogram_max_frequency as usize,
-            input_sample_rate: file.build_settings.resample_rate as usize,
+            height: build_settings.spectrogram_height as usize,
+            frequency_cutoff: build_settings.spectrogram_max_frequency as usize,
+            input_sample_rate: build_settings.resample_rate as usize,
         },
     )
-    .collect::<Vec<_>>();
+    .collect::<VecDeque<_>>();
+
+    debug!(len=spectrogram.len(), "created spectrogram");
 
     // TODO: make this only happen on one iteration
     // if options.debug_images {
@@ -248,18 +267,18 @@ fn get_error(
     // }
 
     let empty_vec = vec![0.0; spectrogram[0].len()];
-    spectrogram.resize(spectrogram.len() + 3, empty_vec.clone());
-    spectrogram.reverse();
-    spectrogram.resize(spectrogram.len() + 3, empty_vec.clone());
-    spectrogram.reverse();
+    for _ in 0..3 {
+        spectrogram.push_front(empty_vec.clone());
+        spectrogram.push_back(empty_vec.clone());
+    }
+    let spectrogram = spectrogram.make_contiguous();
 
-    let before_len = file.segments.len();
-    let filtered_segments = file
-        .segments
+    let before_len = segments.len();
+    let filtered_segments = segments
         .iter()
         .enumerate()
-        .filter(|(_, segment)| segment.vectors.len() <= spectrogram.len())
-        .filter(|(_, segment)| segment.vectors.len() >= skip_less_than)
+        .filter(|(_, segment)| segment.len() <= spectrogram.len())
+        .filter(|(_, segment)| segment.len() >= skip_less_than)
         .collect::<Vec<_>>();
     debug!(
         before_len,
@@ -271,11 +290,11 @@ fn get_error(
 
     for (segment_index, segment) in &filtered_segments {
         let mut min_error = f32::INFINITY;
-        for spectrogram_window in spectrogram.windows(segment.vectors.len()) {
+        for spectrogram_window in spectrogram.windows(segment.len()) {
             let error = spectrogram_window
                 .iter()
-                .zip(segment.vectors.iter())
-                .map(|(spect_vect, segmenmt_vect)| distance_sq(&spect_vect, &segmenmt_vect))
+                .zip(segment.iter())
+                .map(|(spect_vect, segment_vect)| distance_sq(&spect_vect, &segment_vect))
                 .sum::<f32>()
                 / spectrogram_window.len() as f32;
             min_error = min_error.min(error);
