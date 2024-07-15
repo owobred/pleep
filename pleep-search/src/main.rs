@@ -46,22 +46,20 @@ fn main() {
     let (send, recv) = crossbeam::channel::unbounded();
 
     let mut errors = vec![f32::INFINITY; file.segments.len()];
-    // let mut trimmed_segments = file
-    //     .segments
-    //     .clone()
-    //     .into_iter()
-    //     .map(|segment| segment.vectors.into())
-    //     .collect::<Vec<VecDeque<_>>>();
-    for remove_pre in (0..=num_extra_start_vectors_to_remove).step_by(remove_samples_step) {
-        debug!(remove_pre, "starting trim");
+    let mut trimmed_segments = Vec::new();
 
+    for remove_pre in (0..=num_extra_start_vectors_to_remove).step_by(remove_samples_step) {
         let trimmed = file
             .segments
             .iter()
             .map(|segment| &segment.vectors[(remove_pre.min(segment.vectors.len()))..])
             .collect::<Vec<_>>();
 
-        threadpool.scope(|s| {
+        trimmed_segments.push(trimmed);
+    }
+
+    threadpool.scope(|s| {
+        for trimmed in &trimmed_segments {
             let mut slices = Vec::new();
             for index in 0..=num_extra_offsets {
                 let offset = (index * audio.sample_rate * file.build_settings.fft_size as usize
@@ -74,7 +72,6 @@ fn main() {
                 let build_settings = &file.build_settings;
                 let options = &options;
                 let send = send.clone();
-                let trimmed_segments = &trimmed;
 
                 s.spawn(move |_s| {
                     debug!(offset, "starting offset");
@@ -85,23 +82,19 @@ fn main() {
                         build_settings,
                         options,
                         min_num_vectors,
-                        trimmed_segments,
+                        &trimmed,
                     );
 
                     send.send(offset_errors).unwrap();
                 });
             }
-        });
-    }
+        }
+    });
     drop(send);
 
     debug!("merging errors");
     while let Ok(offset_errors) = recv.recv() {
         for (index, mse) in offset_errors {
-            // errors
-            //     .entry(index)
-            //     .and_modify(|v| *v = mse.min(*v))
-            //     .or_insert(f32::INFINITY);
             errors[index] = errors[index].min(mse)
         }
     }
