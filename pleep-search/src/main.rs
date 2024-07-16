@@ -143,9 +143,10 @@ fn main() {
             serde_json::to_string(&CommandOutput {
                 matches: top_n
                     .into_iter()
-                    .map(|(segment_index, score)| Match {
+                    .map(|(segment_index, mse)| Match {
                         title: file.segments[segment_index].title.clone(),
-                        score
+                        mse,
+                        confidence: (options.max_error - mse) / options.max_error,
                     })
                     .collect()
             })
@@ -233,7 +234,8 @@ struct CommandOutput {
 #[derive(Debug, Clone, serde::Serialize)]
 struct Match {
     title: String,
-    score: f32,
+    mse: f32,
+    confidence: f32,
 }
 
 fn get_error(
