@@ -81,7 +81,7 @@ fn main() {
                         build_settings,
                         options,
                         options.min_vectors,
-                        &trimmed,
+                        trimmed,
                         options.spectrogram_padding,
                     );
 
@@ -108,7 +108,7 @@ fn main() {
     best.sort_by(|(_, l), (_, r)| l.partial_cmp(r).unwrap_or(std::cmp::Ordering::Less));
 
     if options.debug_images {
-        if best.len() > 0 {
+        if !best.is_empty() {
             let best_section = &file.segments[best[0].0];
             save_spectrogram("best.png", &best_section.vectors);
         } else {
@@ -310,7 +310,7 @@ fn get_error(
             let error = spectrogram_window
                 .iter()
                 .zip(segment.iter())
-                .map(|(spect_vect, segment_vect)| distance_sq(&spect_vect, &segment_vect))
+                .map(|(spect_vect, segment_vect)| distance_sq(spect_vect, segment_vect))
                 .sum::<f32>()
                 / spectrogram_window.len() as f32;
             min_error = min_error.min(error);

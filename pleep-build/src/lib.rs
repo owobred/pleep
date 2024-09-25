@@ -129,6 +129,7 @@ impl<S: pleep::spectrogram::Float, I: Iterator<Item = S>> LogSpectrogramIterator
         }
     }
 
+    #[expect(clippy::misnamed_getters, reason = "this takes an input of height `height` and changes it to be `cutoff_bin`, so that is the new height")]
     pub fn height(&self) -> usize {
         self.cutoff_bin
     }
