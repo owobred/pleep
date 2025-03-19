@@ -64,7 +64,7 @@ fn main() {
                 );
 
                 let segment = pleep_build::file::Segment {
-                    title: file.to_string_lossy().to_string(),
+                    title: file.to_string_lossy().to_string().replace("../", ""),
                     vectors: log_spectrogram.collect(),
                     duration: audio_duration,
                 };
