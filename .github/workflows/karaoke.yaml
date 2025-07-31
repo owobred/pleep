@@ -103,6 +103,6 @@ jobs:
 
       - name: Upload build
         uses: softprops/action-gh-release@v2
-        tag_name: latest
         with:
+          tag_name: latest
           files: out.bin
