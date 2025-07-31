@@ -68,11 +68,16 @@ jobs:
           path: "pleep"
 
       - name: Cached song segments
+        id: cache
         uses: actions/cache@v4
         with:
           key: audio-segments
           path: |
             segments/
+
+      - name: Make segments folder
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: mkdir cache
 
       - name: Download new songlist
         uses: actions/checkout@v4
