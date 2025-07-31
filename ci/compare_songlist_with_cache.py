@@ -17,7 +17,7 @@ for hash, filename in rows:
 
 hashes = set(hash for hash, _ in rows)
 
-for file in os.listdir("segments/"):
+for file in os.listdir("segments"):
     if file.removesuffix(".segment.bin") not in hashes:
         print(f"REMOVE: segments/{file}")
         # os.remove(f"segments/{file}")
