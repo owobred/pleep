@@ -73,9 +73,9 @@ jobs:
           sparse-checkout: "ci"
           path: "pleep"
 
-      - name: Cached song segments
+      - name: Load cached song segments
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           key: audio-segments
           path: |
@@ -109,3 +109,10 @@ jobs:
         with:
           tag_name: latest
           files: out.bin
+
+      - name: Updated cached song segments
+        uses: actions/cache/save@v4
+        with:
+          key: audio-segments
+          path: |
+            segments/
