@@ -99,11 +99,9 @@ jobs:
         run: ./pleep-build-action
 
       - name: Update Release
-        uses: IsaacShelton/update-existing-release@v1.3.4
+        uses: johnwbyrd/update-release@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           release: "Latest"
           tag: "latest"
-          replace: true
-          files: >
-            out.bin
+          files: out.bin
