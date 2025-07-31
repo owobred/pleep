@@ -4,7 +4,7 @@ import os
 
 rows: list[tuple[str, str]] = []
 
-with open("songlist.csv") as file:
+with open("songlist/songlist.csv") as file:
     reader = csv.reader(file)
     for row in reader:
         rows.append(tuple(row))  # type: ignore
