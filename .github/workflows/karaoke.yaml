@@ -32,7 +32,7 @@ jobs:
 
       - name: Convert songlist
         run: |
-          python3 pleep/ci/generate_songlist.py
+          python3 ci/generate_songlist.py
           rm temp_songlist.txt
 
       - name: Download previous songlist
@@ -42,7 +42,7 @@ jobs:
           path: songlist
 
       - name: Commit changes (if any)
-        run: bash pleep/ci/compare_songlists.sh
+        run: bash ci/compare_songlists.sh
 
   generate_new_database:
     name: Generate new database
@@ -79,7 +79,7 @@ jobs:
           path: songlist
 
       - name: Find segments in cache, and remove outdated
-        run: python3 pleep/ci/compare_songlist_with_cache.py
+        run: python3 ci/compare_songlist_with_cache.py
 
       - name: Download pleep-build-action
         run: |
