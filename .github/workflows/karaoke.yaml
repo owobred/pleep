@@ -1,0 +1,101 @@
+name: Karaoke Sync
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+
+jobs:
+  update_songlist:
+    name: Update songlist
+    runs-on: ubuntu-latest
+
+    outputs:
+      songlist_updated: $
+
+    steps:
+      - name: Install rclone
+        run: "sudo -v ; curl -s https://rclone.org/install.sh | sudo bash"
+
+      - name: Setup rclone
+        run: |
+          mkdir -p ~/.config/rclone/
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: Get current songlist
+        run: "rclone hashsum sha256 arg_gd:/audio > temp_songlist.txt"
+
+      - name: Download ci scripts
+        uses: actions/checkout@v4
+        with:
+          filter: "/ci/"
+
+      - name: Convert songlist
+        run: |
+          python3 ci/generate_songlist.py
+          rm temp_songlist.txt
+
+      - name: Download previous songlist
+        uses: actions/checkout@v4
+        with:
+          ref: songlist-history
+          path: songlist
+
+      - name: Commit changes (if any)
+        run: bash ci/compare_songlists.sh
+
+  generate_new_database:
+    name: Generate new database
+    runs-on: ubuntu-latest
+
+    needs: update_songlist
+    if: ${{ needs.update_songlist.outputs.songlist_updated }}
+
+    steps:
+      - name: Install rclone
+        run: "sudo -v ; curl -s https://rclone.org/install.sh | sudo bash"
+
+      - name: Setup rclone
+        run: |
+          mkdir -p ~/.config/rclone/
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: Download ci scripts
+        uses: actions/checkout@v4
+        with:
+          filter: "/ci/"
+
+      - name: Cached song segments
+        uses: actions/cache@v4
+        with:
+          key: audio-segments
+          path: |
+            segments/
+
+      - name: Download new songlist
+        uses: actions/checkout@v4
+        with:
+          ref: songlist-history
+          path: songlist
+
+      - name: Find segments in cache, and remove outdated
+        run: python3 ci/compare_songlist_with_cache.py
+
+      - name: Download pleep-build-action
+        run: |
+          wget https://github.com/owobred/pleep/releases/download/latest/pleep-build-action
+          chmod +x pleep-build-action
+
+      - name: Run pleep-build-action
+        env:
+          RUST_LOG: debug
+        run: ./pleep-build-action
+
+      - name: Update Release
+        uses: IsaacShelton/update-existing-release@v1.3.4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release: "Latest"
+          tag: "latest"
+          replace: true
+          files: >
+            out.bin
