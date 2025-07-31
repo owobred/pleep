@@ -28,7 +28,7 @@ jobs:
       - name: Download ci scripts
         uses: actions/checkout@v4
         with:
-          filter: "/ci/"
+          filter: "ci/"
 
       - name: Convert songlist
         run: |
@@ -63,7 +63,7 @@ jobs:
       - name: Download ci scripts
         uses: actions/checkout@v4
         with:
-          filter: "/ci/"
+          filter: "ci/"
 
       - name: Cached song segments
         uses: actions/cache@v4
