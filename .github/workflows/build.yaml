@@ -25,8 +25,8 @@ jobs:
       - name: Build pleep-search
         run: cargo build --release --bin pleep-search
 
-      - name: Build pleep-action
-        run: cargo build --release --bin pleep-action
+      - name: Build pleep-build-action
+        run: cargo build --release --bin pleep-build-action
 
       - name: Create release
         uses: softprops/action-gh-release@v2
