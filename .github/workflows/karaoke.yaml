@@ -52,6 +52,9 @@ jobs:
     needs: update_songlist
     if: ${{ needs.update_songlist.outputs.songlist_updated }}
 
+    permissions:
+      contents: write
+
     steps:
       - name: Install rclone
         run: "sudo -v ; curl -s https://rclone.org/install.sh | sudo bash"
@@ -98,10 +101,8 @@ jobs:
           RUST_LOG: debug
         run: ./pleep-build-action
 
-      - name: Update Release
-        uses: johnwbyrd/update-release@v1.0.0
+      - name: Upload build
+        uses: softprops/action-gh-release@v2
+        tag_name: latest
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          release: "Latest"
-          tag: "latest"
           files: out.bin
