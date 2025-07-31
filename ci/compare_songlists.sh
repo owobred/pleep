@@ -15,6 +15,6 @@ else
 
     git add songlist.csv
     git commit -m "update songlist"
-    # git push origin songlist-history
+    git push origin songlist-history
     echo "songlist_changed=1" >> "$GITHUB_OUTPUT"
 fi
