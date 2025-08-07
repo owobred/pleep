@@ -111,7 +111,6 @@ jobs:
           files: out.bin
       
       - name: Save cached song segments
-        id: cache
         uses: actions/cache/save@v4
         with:
           key: audio-segments
