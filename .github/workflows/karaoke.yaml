@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      songlist_updated:
+      songlist_updated: ${{ steps.check_changes.outputs.songlist_updated }}
 
     permissions:
       contents: write
@@ -46,6 +46,7 @@ jobs:
           path: songlist
 
       - name: Commit changes (if any)
+        id: check_changes
         run: bash pleep/ci/compare_songlists.sh
 
   generate_new_database:
