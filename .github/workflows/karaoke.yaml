@@ -80,7 +80,7 @@ jobs:
         with:
           key: audio-segments
           path: |
-            segments
+            ~/segments/
 
       - name: Make segments folder
         if: steps.cache.outputs.cache-hit != 'true'
@@ -116,5 +116,4 @@ jobs:
         with:
           key: audio-segments
           path: |
-            segments
-
+            ~/segments/
